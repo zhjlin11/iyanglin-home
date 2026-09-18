@@ -1,0 +1,27 @@
+export default function Loading() {
+  return (
+    <div style={{ minHeight: "100vh", background: "#F6F7F9" }}>
+      <div style={{ height: 64, background: "#16A67A" }} />
+      <div style={{ padding: "16px 16px 40px" }}>
+        <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+          <div style={{ height: 120, borderRadius: 16, background: "linear-gradient(135deg, #BE185D, #EC4899)", marginBottom: 24 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #E5E7EB" }}>
+                <div style={{ height: 200, background: "#E5E7EB" }} />
+                <div style={{ padding: 16 }}>
+                  <div style={{ height: 18, width: "50%", background: "#E5E7EB", borderRadius: 4, marginBottom: 10 }} />
+                  <div style={{ height: 14, width: "70%", background: "#F3F4F6", borderRadius: 4, marginBottom: 8 }} />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[1,2,3].map(j => <div key={j} style={{ width: 50, height: 20, background: "#FDF2F8", borderRadius: 4 }} />)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}} div[style*="background: #E5E7EB"],div[style*="background: #F3F4F6"],div[style*="background: #FDF2F8"]{animation:pulse 1.5s ease-in-out infinite}`}</style>
+    </div>
+  );
+}

@@ -1,0 +1,206 @@
+import { notFound } from "next/navigation";
+import { listContent } from "@/lib/content-store";
+import { stripHtml } from "@/lib/strip-html";
+import Navbar from "@/components/Navbar";
+import DetailActions from "@/components/DetailActions";
+import ContactRevealer from "@/components/ContactRevealer";
+import { Metadata } from "next";
+
+export const dynamic = "force-dynamic";
+
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+
+const categoryLabels: Record<string, string> = {
+  ershou: "二手交易",
+  service: "本地服务",
+  car: "车辆买卖",
+  pet: "宠物同城",
+  pinche: "拼车顺风车",
+  qiugou: "求购",
+  zhuanrang: "店面转让",
+  life: "生活服务",
+  mobile: "手机电脑",
+  appliance: "家具家电",
+  idle: "闲置物品",
+  secondhand: "二手物品",
+  rent: "租房合租",
+  repair: "家电维修",
+  clean: "保洁家政",
+  move: "同城搬家",
+  lost: "失物招领",
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const allListings = await listContent("listing");
+  const item = allListings.find((entry) => entry.id === id);
+  if (!item) return {};
+
+  const catLabel = categoryLabels[item.category || ""] || "分类信息";
+  const title = `${item.title} - ${catLabel} - 杨林生活网`;
+  const description = `${item.title}。分类：${catLabel}。更多杨林本地二手交易、便民服务与求购闲置信息请上杨林生活网。`;
+
+  return {
+    title,
+    description,
+    keywords: [item.title, catLabel, "杨林二手", "杨林服务", "杨林生活网"],
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: `https://iyanglin.com/info/${item.id}`,
+      siteName: "杨林生活网",
+    },
+    alternates: {
+      canonical: `https://iyanglin.com/info/${item.id}`,
+    },
+  };
+}
+
+function formatPublishTime(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffHours < 24 && date.getDate() === now.getDate()) {
+    return "🔥 刚刚发布";
+  } else if (diffDays === 1 || (diffHours < 48 && date.getDate() === now.getDate() - 1)) {
+    return "⏱️ 昨天发布";
+  } else if (diffDays > 1 && diffDays <= 7) {
+    return `${diffDays}天前发布`;
+  } else {
+    return date.toLocaleDateString("zh-CN");
+  }
+}
+
+function calcViewsAndFavs(idString: string) {
+  let hash = 0;
+  for (let i = 0; i < idString.length; i++) {
+    hash = (hash << 5) - hash + idString.charCodeAt(i);
+  }
+  const views = Math.abs(hash % 380) + 120;
+  const favs = Math.abs((hash >> 2) % 35) + 6;
+  return { views, favs };
+}
+
+export default async function InfoDetailPage({ params }: PageProps) {
+  const { id } = await params;
+  const allListings = await listContent("listing");
+  const item = allListings.find((entry) => entry.id === id && entry.status === "approved");
+
+  if (!item) notFound();
+
+  const isTop = Boolean(item.topUntil && new Date(item.topUntil) > new Date());
+  const { views, favs } = calcViewsAndFavs(item.id);
+
+  let relatedListings = allListings.filter((entry) => entry.status === "approved" && entry.category === item.category && entry.id !== item.id);
+  if (relatedListings.length < 3) {
+    const fallback = allListings.filter((entry) => entry.status === "approved" && entry.id !== item.id && !relatedListings.includes(entry));
+    relatedListings = [...relatedListings, ...fallback].slice(0, 3);
+  } else {
+    relatedListings = relatedListings.slice(0, 3);
+  }
+
+  return (
+    <main>
+      <Navbar />
+
+      <section className="page-header-compact">
+        <div className="shell">
+          <a href="/info" className="button button-small button-secondary" style={{ marginBottom: "12px" }}>
+            ← 返回分类信息列表
+          </a>
+          <div className="hero-header" style={{ marginBottom: 0 }}>
+            <div className="hero-title-group">
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+                <span className="eyebrow-tag">{categoryLabels[item.category || ""] || "本地信息"}</span>
+                {isTop && <span className="pinned-badge">🔥 置顶推介</span>}
+              </div>
+              <h1>{item.title}</h1>
+
+              <p style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+                <span>📍 杨林本地</span>
+                <span>📅 {formatPublishTime(item.createdAt)}</span>
+                <span>👁️ 浏览 <b>{views}</b> 次</span>
+                <span>❤️ 收藏 <b>{favs}</b> 人</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="shell info-detail-layout">
+        <div>
+          <article className="info-detail-main">
+            <DetailActions />
+
+            <h2 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "16px", color: "var(--ink)", paddingBottom: "8px", borderBottom: "1px solid var(--line)" }}>
+              详细信息描述
+            </h2>
+
+            <div className="item-card-body" style={{ fontSize: "15px", whiteSpace: "pre-wrap", lineHeight: "1.7", color: "var(--ink-secondary)" }}>
+              {stripHtml(item.body).split(/\n+/).map((paragraph, idx) => (
+                <p key={idx} style={{ marginBottom: "12px" }}>{paragraph}</p>
+              ))}
+            </div>
+
+            {item.images && item.images.length > 0 && (
+              <div style={{ marginTop: "28px" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "12px" }}>📷 实拍图片 ({item.images.length}张)</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px" }}>
+                  {item.images.map((img, i) => (
+                    <a key={i} href={img} target="_blank" rel="noreferrer">
+                      <img 
+                        src={img} 
+                        alt={`${item.title} 图片 ${i + 1}`} 
+                        style={{ width: "100%", height: "160px", objectFit: "cover", borderRadius: "var(--radius-md)", border: "1px solid var(--line)" }} 
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </article>
+
+          {relatedListings.length > 0 && (
+            <div style={{ marginTop: "32px" }}>
+              <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px" }}>🔍 同类推荐便民信息</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
+                {relatedListings.map((rel) => (
+                  <div key={rel.id} className="modern-card">
+                    <h4 className="modern-card-title">{rel.title}</h4>
+                    <p className="modern-card-desc">{stripHtml(rel.body).slice(0, 50)}...</p>
+                    <div className="modern-card-meta">
+                      <span>📍 杨林本地</span>
+                      <a href={`/info/${rel.id}`} className="button button-small button-secondary">查看</a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <aside className="info-detail-sidebar">
+            <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700", color: "var(--ink)" }}>联系发布者</h3>
+            <div style={{ marginBottom: "16px" }}>
+              <ContactRevealer contact={item.contact || ""} />
+            </div>
+          </aside>
+
+          <aside className="info-detail-sidebar" style={{ background: "#fef3c7", borderColor: "#fde68a" }}>
+            <h4 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "700", color: "#b45309" }}>⚠️ 安全防骗提示</h4>
+            <p style={{ margin: 0, fontSize: "12px", color: "#92400e", lineHeight: "1.5" }}>
+              线下交易请当面核验物品，切勿提前线上支付押金或预订金；涉及兼职招聘切勿缴纳任何费用。
+            </p>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}

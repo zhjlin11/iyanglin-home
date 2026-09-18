@@ -1,0 +1,307 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AdminLayout } from "@/components/admin/AdminLayout";
+import { StatusBadge } from "@/components/admin/StatusBadge";
+import { DataTable, Column } from "@/components/admin/DataTable";
+
+type Item = {
+  id: string;
+  kind: "article" | "job" | "listing" | "house" | "shop" | "post" | "event" | "love";
+  title: string;
+  company?: string;
+  category?: string;
+  contact?: string;
+  body: string;
+  status: string;
+  isTop?: boolean;
+  isFeatured?: boolean;
+  createdAt: string;
+};
+
+const kindLabels: Record<Item["kind"], string> = {
+  article: "文章",
+  job: "招聘",
+  listing: "分类信息",
+  house: "房产",
+  shop: "好店",
+  post: "社区贴子",
+  event: "本地活动",
+  love: "相亲嘉宾",
+};
+
+export default function ContentPage() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [kindFilter, setKindFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const pageSize = 10;
+
+  const load = () =>
+    fetch("/api/content")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "加载失败");
+        setItems(data.items || []);
+        setSelected([]);
+        setError("");
+      })
+      .catch((reason) => setError(reason.message));
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const visible = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          (statusFilter === "all" || item.status === statusFilter) &&
+          (kindFilter === "all" || item.kind === kindFilter) &&
+          `${item.title} ${item.company || ""} ${item.category || ""} ${item.contact || ""} ${item.body}`.toLowerCase().includes(query.toLowerCase().trim()),
+      ),
+    [items, kindFilter, query, statusFilter],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [kindFilter, query, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const changeStatus = async (ids: string[], status: string) => {
+    setMessage("");
+    setError("");
+    const response = await fetch("/api/content", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ids.length === 1 ? { id: ids[0], status } : { ids, status }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setError(data.error || "状态更新失败");
+      return;
+    }
+
+    setMessage(`已更新 ${ids.length} 条内容状态`);
+    load();
+  };
+
+  const toggleTop = async (item: Item) => {
+    setMessage("");
+    setError("");
+    const newIsTop = !item.isTop;
+    const response = await fetch("/api/content", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id, status: item.status, isTop: newIsTop }),
+    });
+    if (!response.ok) {
+      setError("置顶状态切换失败");
+      return;
+    }
+    setMessage(newIsTop ? "🔥 成功设置为黄金置顶" : "已取消置顶");
+    load();
+  };
+
+  const deleteItems = async (ids: string[]) => {
+    setMessage("");
+    setError("");
+    const confirmed = window.confirm(ids.length === 1 ? "确认删除这条内容吗？删除后不可恢复。" : `确认删除选中的 ${ids.length} 条内容吗？`);
+    if (!confirmed) return;
+
+    const response = await fetch("/api/content", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ids.length === 1 ? { id: ids[0] } : { ids }),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(data.error || "内容删除失败");
+      return;
+    }
+
+    setMessage(`已成功删除 ${data.count || ids.length} 条内容`);
+    load();
+  };
+
+  const columns: Column<Item>[] = [
+    {
+      key: "kind",
+      header: "频道类型",
+      width: "110px",
+      render: (item) => (
+        <span style={{ background: "#e2e8f0", color: "#334155", padding: "2px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: "bold" }}>
+          {kindLabels[item.kind] || item.kind}
+        </span>
+      ),
+    },
+    {
+      key: "title",
+      header: "内容标题",
+      render: (item) => (
+        <div>
+          <div style={{ fontWeight: "bold", color: "#0f172a", marginBottom: "2px" }}>
+            {item.title}
+            {item.isTop && (
+              <span style={{ marginLeft: "6px", background: "#ef4444", color: "white", padding: "1px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold" }}>
+                🔥 置顶
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: "12px", color: "#64748b" }}>{item.company || item.category || "杨林本地"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "当前状态",
+      width: "110px",
+      render: (item) => <StatusBadge status={item.status} />,
+    },
+    {
+      key: "createdAt",
+      header: "发布时间",
+      width: "140px",
+      render: (item) => <span style={{ fontSize: "12px", color: "#64748b" }}>{new Date(item.createdAt).toLocaleDateString("zh-CN")}</span>,
+    },
+    {
+      key: "actions",
+      header: "管理操作",
+      width: "260px",
+      render: (item) => (
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <button
+            onClick={() => toggleTop(item)}
+            style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "12px", background: item.isTop ? "#fef3c7" : "#f1f5f9", color: item.isTop ? "#b45309" : "#475569", border: "1px solid #cbd5e1", cursor: "pointer" }}
+          >
+            {item.isTop ? "取消置顶" : "🔥 置顶"}
+          </button>
+          <a
+            href={`/admin/content/${item.id}/edit`}
+            style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "12px", background: "#e0f2fe", color: "#0369a1", textDecoration: "none", border: "1px solid #93c5fd" }}
+          >
+            编辑
+          </a>
+          {item.status === "approved" ? (
+            <button
+              onClick={() => changeStatus([item.id], "offline")}
+              style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "12px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", cursor: "pointer" }}
+            >
+              下线
+            </button>
+          ) : (
+            <button
+              onClick={() => changeStatus([item.id], "approved")}
+              style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "12px", background: "#10b981", color: "white", border: "none", cursor: "pointer" }}
+            >
+              通过
+            </button>
+          )}
+          <button
+            onClick={() => deleteItems([item.id])}
+            style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "12px", background: "#ef4444", color: "white", border: "none", cursor: "pointer" }}
+          >
+            删除
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <AdminLayout
+      title="📦 跨模块内容管理大厅"
+      subtitle="集中检索、流转、编辑与管理全站 7 大核心业务频道便民内容。"
+      actionButton={
+        <div style={{ display: "flex", gap: "8px" }}>
+          <a href="/admin/info/new" className="button button-secondary" style={{ padding: "6px 14px", borderRadius: "8px", textDecoration: "none", fontSize: "13px" }}>
+            + 便民信息
+          </a>
+          <a href="/admin/articles/new" className="button button-primary" style={{ padding: "6px 14px", borderRadius: "8px", textDecoration: "none", fontSize: "13px", background: "#0B7A75", borderColor: "#0B7A75" }}>
+            + 发布内容
+          </a>
+        </div>
+      }
+    >
+      {/* Search & Filter Bar */}
+      <div style={{ background: "white", padding: "1.25rem", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "1.5rem", display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ flex: 1, minWidth: "240px" }}>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索标题、公司、分类、联系方式..."
+            style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none" }}
+          />
+        </div>
+
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none" }}
+        >
+          <option value="all">全部频道</option>
+          <option value="article">文章</option>
+          <option value="job">招聘</option>
+          <option value="listing">分类信息</option>
+          <option value="house">房产</option>
+          <option value="shop">好店商家</option>
+          <option value="post">社区贴子</option>
+          <option value="event">本地活动</option>
+          <option value="love">相亲嘉宾</option>
+        </select>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none" }}
+        >
+          <option value="all">全部状态</option>
+          <option value="approved">已发布 (APPROVED)</option>
+          <option value="pending">待审核 (PENDING)</option>
+          <option value="offline">已下线 (OFFLINE)</option>
+        </select>
+
+        <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "bold" }}>共 {visible.length} 条</span>
+      </div>
+
+      {message && <div className="notice-success" style={{ marginBottom: "1rem" }}>{message}</div>}
+      {error && <div className="notice-error" style={{ marginBottom: "1rem" }}>{error}</div>}
+
+      {/* Componentized DataTable */}
+      <DataTable columns={columns} data={pageItems} keyExtractor={(item) => item.id} emptyText="未检索到符合条件的便民内容" />
+
+      {/* Pagination */}
+      {visible.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.25rem", background: "white", padding: "10px 16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+          <button
+            disabled={currentPage <= 1}
+            onClick={() => setPage((v) => Math.max(1, v - 1))}
+            style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: currentPage <= 1 ? "#f1f5f9" : "white", cursor: currentPage <= 1 ? "not-allowed" : "pointer" }}
+          >
+            上一页
+          </button>
+          <span style={{ fontSize: "13px", color: "#64748b" }}>
+            第 {currentPage} / {totalPages} 页 · 当前显示 {pageItems.length} 条
+          </span>
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+            style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: currentPage >= totalPages ? "#f1f5f9" : "white", cursor: currentPage >= totalPages ? "not-allowed" : "pointer" }}
+          >
+            下一页
+          </button>
+        </div>
+      )}
+    </AdminLayout>
+  );
+}
