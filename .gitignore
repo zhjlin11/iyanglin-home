@@ -44,26 +44,34 @@ backups/
 *.bak
 *.swp
 
-# 临时研究脚本与演练产物
-scratch/
+# 历史服务器临时与调试脚本
 scratch_*
 temp_*
-tmp/
-cache/
-*.photos
-prisma.$*
-patch_files.txt
-0
-
-# 用户上传媒体文件 (按资产独立灾备归档，不进入 Git 源码仓库)
-public/UploadFile/
-public/uploads/
-
-# 历史遗留资产临时目录
-legacy-assets/input/
-legacy-assets/work/
-legacy-assets/reports/
-legacy-assets/errors/
+check-*.js
+check_*.js
+count-*.js
+find-*.js
+find_*.js
+insert_*.js
+migrate-*.js
+query_*.js
+scrape-*.js
+search_*.js
+seed_*.js
+test_*.js
+update_*.js
+update-*.js
+batch_import_*.js
+house-sample.js
+img-analysis.js
+server_runner.js
+final-check.js
+=118
+*.json.bak
+audit_result.json
+ecosystem.config.js
+ecosystem.config.js.bak
+.next-*
 
 # 操作系统与编辑器生成文件
 .DS_Store
