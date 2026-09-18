@@ -1,0 +1,2996 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+  REVIEWER
+  USER
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  OFFLINE
+  REJECTED
+  EXPIRED
+  RESOLVED
+  SOLD
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id                 String            @id @default(cuid())
+  username           String            @unique
+  nickname           String?
+  avatar             String?
+  passwordHash       String
+  role               Role              @default(USER)
+  status             String            @default("ACTIVE") // ACTIVE | DISABLED
+  sessionVersion     Int               @default(1)
+  phone              String?           @unique
+  phoneVerifiedAt    DateTime?
+  wechatOpenId       String?           @unique
+  wechatUnionId      String?           @unique
+  wechatNickname     String?
+  wechatAvatar       String?
+  passwordChangedAt  DateTime?
+  // Profile provenance prevents an external identity provider from overwriting
+  // a member's own profile image or nickname.
+  avatarSource       String?
+  nicknameSource     String?
+  registrationSource String?
+  lastLoginAt        DateTime?
+  lastActiveAt       DateTime?
+  lastLoginProvider  String?
+  createdAt          DateTime          @default(now())
+  logs               OperationLog[]
+  billingOrders      BillingOrder[] @relation("UserOrders")
+  articles           Article[]
+  jobs               Job[]
+  listings           Listing[]
+  houses             House[]
+  shops              Shop[]
+  posts              Post[]
+  comments           PostComment[]
+  postLikes          PostLike[]
+  bannedUntil        DateTime?         // 社区禁言截止时间
+  communityBadge     String?           // 社区身份勋章: 学生认证 | 经开区职工 | 街坊认证 | 版主
+  events             Event[]
+  signups            EventSignup[]
+  datingProfiles     DatingProfile[]
+  favorites          Favorite[]
+  notifications      Notification[]
+  reports            Report[]
+  searchLogs         SearchLog[]
+  pointAccount       PointAccount?
+  memberships        UserMembership[]
+  coinWallet         CoinWallet?
+  contactPurchases   ContactPurchase[]
+  resumes            Resume[]
+  jobApplications    JobApplication[]
+  authAccounts       AuthAccount[]
+  wechatAccounts     WechatAccount[]
+  loginLogs          LoginLog[]
+  wechatFollower     WechatFollower?
+  industrialProperties IndustrialProperty[]
+  listingPromotions  ListingPromotion[]
+  serviceProvider    ServiceProvider?
+  serviceRequests    ServiceRequest[]
+  reviews            Review[]
+  contactEvents      ContactEvent[]
+  addresses          UserAddress[]
+  customerServiceOrders ServiceOrder[] @relation("CustomerServiceOrders")
+  refunds            Refund[]
+  afterSales         AfterSale[]
+  follows            FollowProvider[]
+  userCoupons        UserCoupon[]
+  userPreference     UserPreference?
+  verificationRecords VerificationRecord[]
+  analyticsEvents     AnalyticsEvent[]
+  aiUsageLogs         AiUsageLog[]
+  aiConversations     AiConversation[]
+  // P7: 多端统一与组织架构扩展
+  wechatIdentities   WechatIdentity[]
+  organizationMembers OrganizationMember[]
+  assignedTasks      OrganizationTask[]
+  mallOrders         MallOrder[]
+  assignedTechnicianOrders ServiceOrder[] @relation("TechnicianOrders")
+  ownedOrganizations Organization[]  @relation("OrganizationOwner")
+  candidates         Candidate[]
+
+}
+
+model WechatFollower {
+  id                String                       @id @default(cuid())
+  openId            String                       @unique
+  unionId           String?
+  nickname          String?
+  avatar            String?
+  subscribed        Boolean                      @default(false)
+  subscribeTime     DateTime?
+  unsubscribedAt    DateTime?
+  firstSeenSource   String                       @default("OAUTH")
+  qrScene           String? // 关注时的二维码场景值
+  lastSyncedAt      DateTime                     @default(now())
+  lastInteractionAt DateTime? // 最近互动时间
+  userId            String?                      @unique
+  user              User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  tags              WechatTagRelation[]
+  events            WechatUserEvent[]
+  conversations     WechatCustomerConversation[]
+  leads             BusinessLead[]
+
+  @@index([unionId])
+  @@index([subscribed])
+  @@index([qrScene])
+}
+
+model DatingProfile {
+  id            String        @id @default(cuid())
+  gender        String        @default("female") // female | male
+  nickname      String
+  birthYear     Int           @default(1995)
+  heightCm      Int           @default(165)
+  education     String        @default("本科")
+  occupation    String
+  income        String        @default("5000-8000元/月")
+  maritalStatus String        @default("未婚")
+  location      String        @default("杨林本地")
+  requirement   String
+  intro         String
+  photos        String[]      @default([])
+  contact       String
+  status        ContentStatus @default(DRAFT)
+  viewsCount    Int           @default(0)
+  authorId      String?
+  author        User?         @relation(fields: [authorId], references: [id])
+  oldId         String?       @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Event {
+  id        String        @id @default(cuid())
+  title     String
+  category  String        @default("outdoor")
+  eventTime String
+  location  String
+  fee       String        @default("免费")
+  quota     String        @default("不限")
+  contact   String
+  intro     String
+  images    String[]      @default([])
+  status    ContentStatus @default(DRAFT)
+  isTop     Boolean       @default(false)
+  topUntil  DateTime?
+  authorId  String?
+  author    User?         @relation(fields: [authorId], references: [id])
+  oldId     String?       @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  signups   EventSignup[]
+}
+
+model EventSignup {
+  id        String   @id @default(cuid())
+  eventId   String
+  name      String
+  phone     String
+  numPeople Int      @default(1)
+  note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model Post {
+  id             String        @id @default(cuid())
+  title          String
+  board          String        @default("yanglin") // yanglin | news | help | life | college | trade
+  category       String        @default("share")   // share | help | trade | news | topic | yanglin | college
+  body           String
+  images         String[]      @default([])
+  topics         String[]      @default([])        // 关联话题标签，如 ["大学城美食", "经开区生活"]
+  status         ContentStatus @default(DRAFT)
+  isTop          Boolean       @default(false)
+  topUntil       DateTime?
+  isFeatured     Boolean       @default(false)     // 社区精选推荐
+  resolvedStatus String        @default("OPEN")    // 求助帖状态: OPEN | RESOLVED
+  viewsCount     Int           @default(0)
+  repliesCount   Int           @default(0)
+  likesCount     Int           @default(0)         // 真实点赞数
+  favoritesCount Int           @default(0)         // 真实收藏数
+  authorId       String?
+  author         User?         @relation(fields: [authorId], references: [id])
+  oldId          String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  comments       PostComment[]
+  likes          PostLike[]
+
+  @@index([board, status])
+  @@index([category, status])
+  @@index([createdAt])
+}
+
+model PostComment {
+  id         String        @id @default(cuid())
+  postId     String
+  post       Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentId   String?       // 二级回复树形嵌套 (父级评论ID)
+  parent     PostComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    PostComment[] @relation("CommentReplies")
+  content    String
+  likesCount Int           @default(0)
+  isFeatured Boolean       @default(false)
+  authorId   String?
+  author     User?         @relation(fields: [authorId], references: [id])
+  createdAt  DateTime      @default(now())
+
+  @@index([postId])
+  @@index([parentId])
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  icon        String   @default("💬")
+  description String?
+  postsCount  Int      @default(0)
+  viewsCount  Int      @default(0)
+  isHot       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isHot])
+}
+
+model Article {
+  id        String        @id @default(cuid())
+  title     String
+  body      String
+  category  String        @default("life")
+  status    ContentStatus @default(DRAFT)
+  authorId  String?
+  author    User?         @relation(fields: [authorId], references: [id])
+  images    String[]      @default([])
+  oldId     String?       @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Job {
+  id                  String           @id @default(cuid())
+  title               String
+  company             String
+  companyNameSnapshot String?
+  companyLogoSnapshot String?
+  companyId           String?
+  companyEntity       Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactName         String?
+  contactPhone        String?
+  contactWechat       String?
+  address             String?
+  body                String
+  jobType             String           @default("fulltime") // fulltime | parttime
+  area                String           @default("杨林地区")
+  salary              String           @default("面议")
+  status              ContentStatus    @default(DRAFT)
+  isTop               Boolean          @default(false)
+  topUntil            DateTime?
+  authorId            String?
+  author              User?            @relation(fields: [authorId], references: [id])
+  images              String[]         @default([])
+  oldId               String?          @unique
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  applications        JobApplication[]
+  organizationId      String?
+  organization        Organization?    @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  candidates          Candidate[]
+
+  @@index([companyId])
+  @@index([organizationId])
+}
+
+// ==========================================
+// 人才简历库 (复刻老站 mh163k_Job_Resume)
+// ==========================================
+
+model Resume {
+  id           String           @id @default(cuid())
+  name         String // 求职者姓名
+  gender       String           @default("male") // male=男 | female=女
+  birthYear    Int              @default(1998) // 出生年份
+  education    String           @default("大专") // 初中及以下 | 高中/中专 | 大专 | 本科 | 硕士及以上
+  experience   String           @default("1-3年") // 应届生 | 1年以内 | 1-3年 | 3-5年 | 5-10年 | 10年以上
+  targetJob    String // 期望职位: 如「行政文员」「销售主管」「厨师」「司机」
+  targetSalary String           @default("3000-5000元/月")
+  targetArea   String           @default("杨林职教园区")
+  jobStatus    String           @default("LOOKING") // LOOKING=离职-随时到岗 | OPEN=在职-月内到岗 | NOT_LOOKING=暂不找工作
+  skills       String? // 技能/证书标签
+  intro        String // 自我评价与工作履历
+  phone        String // 联系手机
+  wechat       String? // 微信号
+  avatar       String? // 个人免冠/生活照
+  status       ContentStatus    @default(APPROVED) // DRAFT | PENDING | APPROVED | OFFLINE
+  isTop        Boolean          @default(false)
+  topUntil     DateTime?
+  viewsCount   Int              @default(0)
+  authorId     String?
+  author       User?            @relation(fields: [authorId], references: [id])
+  oldId        String?          @unique
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  applications JobApplication[]
+  candidates   Candidate[]
+
+  @@index([targetJob])
+  @@index([status])
+  @@index([isTop])
+}
+
+// ==========================================
+// 职位投递与应聘意向 (复刻老站 mh163k_Job_PostApplication)
+// ==========================================
+
+model JobApplication {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resumeId  String
+  resume    Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING") // PENDING=待查看 | VIEWED=已查阅 | INVITED=邀面试 | REJECTED=不合适
+  note      String? // 企业回评备注
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId, status])
+  @@index([resumeId])
+  @@index([userId])
+}
+
+model Listing {
+  id            String        @id @default(cuid())
+  title         String
+  category      String
+  subCategory   String?       // 二级细分子类
+  itemType      String        @default("OFFER") // OFFER | WANTED | TRANSFER | FOR_SALE | FOR_RENT | WANTED_BUY | WANTED_RENT | HELP
+  price         String?       @default("面议")
+  priceNum      Float?        // 数字价格便于排序与过滤
+  priceUnit     String?       @default("元")
+  condition     String?       // 物品成色: 全新 | 95新 | 9成新 | 8成新 | 不限
+  area          String        @default("杨林经开区")
+  address       String?       // 详细地址或发车/交易地点
+  contact       String
+  contactName   String?       // 联系人称呼
+  wechat        String?       // 微信号
+  body          String
+  images        String[]      @default([])
+  viewsCount    Int           @default(0)
+  likesCount    Int           @default(0)
+  status            ContentStatus      @default(DRAFT)
+  rejectReason      String?            // 审核驳回原因
+  expiresAt         DateTime?          // 信息到期时间
+  isTop             Boolean            @default(false)
+  topUntil          DateTime?          // 分类置顶截止时间
+  isFeatured        Boolean            @default(false) // 分类精选推荐
+  featuredUntil     DateTime?          // 分类精选推荐截止时间
+  isHomeFeatured    Boolean            @default(false) // 首页大厅精选推荐
+  homeFeaturedUntil DateTime?          // 首页精选推荐截止时间
+  promotions        ListingPromotion[] // 推广订单流水与权益关联
+  contactEvents     ContactEvent[]     // 联系行为统计
+  refreshedAt       DateTime           @default(now())
+  departureTime     String?            // 顺风车发车时间
+  fromPlace         String?            // 顺风车出发地
+  toPlace           String?            // 顺风车目的地
+  extraData         Json?              // 分类扩展动态字段 (如车型、空位、科目、年级、宠物年龄等)
+  authorId          String?
+  author            User?              @relation(fields: [authorId], references: [id])
+  oldId             String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([category, status])
+  @@index([subCategory])
+  @@index([area])
+  @@index([refreshedAt])
+  @@index([isTop])
+  @@index([status, expiresAt])
+  @@index([isFeatured, refreshedAt])
+  @@index([isHomeFeatured, refreshedAt])
+}
+
+model House {
+  id        String        @id @default(cuid())
+  title     String
+  houseType String        @default("rent") // rent | secondhand | newhouse | shop
+  price     String        @default("面议")
+  layout    String        @default("不限")
+  areaSize  String        @default("不限")
+  location  String        @default("杨林地区")
+  contact   String
+  body      String
+  status    ContentStatus @default(DRAFT)
+  isTop     Boolean       @default(false)
+  topUntil  DateTime?
+  authorId  String?
+  author    User?         @relation(fields: [authorId], references: [id])
+  images    String[]      @default([])
+  oldId     String?       @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Shop {
+  id         String        @id @default(cuid())
+  name       String
+  category   String        @default("food") // food | service | entertainment | digital
+  address    String        @default("杨林地区")
+  phone      String
+  hours      String        @default("09:00 - 21:00")
+  intro      String
+  logo       String?
+  images     String[]      @default([])
+  status     ContentStatus @default(DRAFT)
+  isFeatured Boolean       @default(false)
+  isTop      Boolean       @default(false)
+  topUntil   DateTime?
+  authorId   String?
+  author     User?         @relation(fields: [authorId], references: [id])
+  oldId      String?       @unique
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model Favorite {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType String // JOB | HOUSE | LISTING | SHOP | EVENT | DATING | POST
+  resourceId   String
+  title        String
+  link         String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, resourceType, resourceId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String    @default("ALL") // ALL | ORDER | INTERACTION | SYSTEM | PROMOTION
+  type      String // COMMENT_REPLY | POST_REPLY | FAVORITE | EVENT_SIGNUP | CONTENT_APPROVED | CONTENT_REJECTED | SYSTEM_NOTICE | ACCOUNT_SECURITY
+  title     String
+  content   String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, category])
+}
+
+model Report {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType String // JOB | HOUSE | LISTING | SHOP | EVENT | DATING | POST
+  resourceId   String
+  title        String
+  reason       String
+  status       String   @default("PENDING") // PENDING | PROCESSING | RESOLVED | REJECTED
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SearchLog {
+  id                String   @id @default(cuid())
+  keyword           String
+  normalizedKeyword String
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  resultCount       Int      @default(0)
+  resourceType      String?
+  durationMs        Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([keyword])
+  @@index([createdAt])
+}
+
+model BillingPlan {
+  id           String         @id @default(cuid())
+  name         String
+  targetKind   String
+  priceCents   Int
+  durationDays Int
+  enabled      Boolean        @default(true)
+  description  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  orders       BillingOrder[]
+}
+
+model BillingSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model BillingOrder {
+  id             String       @id @default(cuid())
+  orderNo        String       @unique
+  planId         String?
+  planName       String
+  targetKind     String
+  targetId       String
+  targetTitle    String
+  amountCents    Int
+  assetType      String       @default("RMB") // RMB | COIN | POINT | FREE_QUOTA
+  amountRmbCents Int          @default(0)
+  coinAmount     Int          @default(0)
+  pointAmount    Int          @default(0)
+  quoteId        String?
+  entitlementId  String?
+  paymentChannel String?      // WECHAT_PAY | COIN_BALANCE | POINT_BALANCE | FREE_QUOTA
+  status         OrderStatus  @default(PENDING_PAYMENT)
+  paidAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  plan           BillingPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  userId         String?
+  organizationId String?
+  user           User?        @relation("UserOrders", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([targetKind, targetId])
+  @@index([status])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([quoteId])
+}
+
+// ==========================================
+// 免费额度使用记录 (防刷、按主体按周期计次)
+// ==========================================
+
+model BillingQuotaUsage {
+  id             String   @id @default(cuid())
+  userId         String?
+  organizationId String?
+  companyId      String?
+  module         String   // job | house | listing | love | ...
+  action         String   @default("PUBLISH") // PUBLISH | TOP | REFRESH
+  periodKey      String   // e.g. "ONCE", "2026-09", "2026-09-18"
+  usedCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, module, action, periodKey])
+  @@index([companyId, module, action, periodKey])
+  @@index([organizationId, module, action, periodKey])
+}
+
+// ==========================================
+// 服务端防篡改即时报价快照 (BillingQuote)
+// ==========================================
+
+model BillingQuote {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String?
+  companyId      String?
+  module         String   // job | house | listing | ...
+  action         String   @default("PUBLISH") // PUBLISH | TOP | HIGHLIGHT | REFRESH
+  isFree         Boolean  @default(false)
+  freeReason     String?  // FREE_QUOTA | GLOBAL_FREE_CAMPAIGN | ADMIN_GRANT
+  allowRmb       Boolean  @default(true)
+  priceRmbCents  Int      @default(0)
+  allowCoin      Boolean  @default(false)
+  priceCoins     Int      @default(0)
+  allowPoint     Boolean  @default(false)
+  pricePoints    Int      @default(0)
+  days           Int?     // 用于置顶等按天增值服务
+  metadata       Json?    // 暂存草稿数据与目标快照
+  status         String   @default("ACTIVE") // ACTIVE | CONSUMED | EXPIRED
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([companyId, status])
+}
+
+// ==========================================
+// 支付与发帖解耦权益凭证 (BillingEntitlement)
+// ==========================================
+
+model BillingEntitlement {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String?
+  companyId      String?
+  module         String    // job | house | listing | ...
+  action         String    @default("PUBLISH")
+  assetType      String    // RMB | COIN | POINT | FREE_QUOTA | ADMIN_GRANT
+  sourceOrderId  String?
+  quoteId        String?
+  status         String    @default("AVAILABLE") // AVAILABLE | CONSUMED | EXPIRED | REVOKED
+  resourceId     String?   // 绑定生成的内容 ID (Job/House 等)
+  metadata       Json?
+  usedAt         DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, module, status])
+  @@index([companyId, module, status])
+  @@index([quoteId])
+}
+
+model OperationLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([targetId])
+  @@index([createdAt])
+}
+
+// ==========================================
+// 收费策略管理 (复刻老站 YL_Charge_Config)
+// ==========================================
+
+model ChargeConfig {
+  id                  String   @id @default(cuid())
+  moduleKey           String   @unique // job | house | shop | listing | event | love | post | article
+  moduleName          String // 招聘信息 | 房产楼市 | 好店商家 | ...
+  unitPrice           Int      @default(0) // 基础发帖单价(分)
+  discountRate        Float    @default(1.0) // 折扣率 0~1
+  isFree              Boolean  @default(true) // 该板块是否免费发布
+  isEnabled           Boolean  @default(true) // 是否启用该板块
+  freePostCount       Int      @default(3) // 首刷免费额度(条)
+  expiryDays          Int      @default(30) // 信息有效期(天), 0=永不过期
+  pinnedPriceDaily    Int      @default(500) // 置顶日单价(分) 默认5元/天
+  highlightPriceDaily Int      @default(300) // 加红日单价(分) 默认3元/天
+  refreshPriceOnce    Int      @default(100) // 刷新单次费用(分) 默认1元/次
+  maleAuditPrice      Int      @default(0) // 相亲男生审核费(分)
+  femaleAuditPrice    Int      @default(0) // 相亲女生审核费(分)
+  chargeType          String   @default("COUNT") // COUNT=按次 | MONTHLY=按月
+  policyJson          String? // 扩展策略JSON
+  sortOrder           Int      @default(0)
+
+  // ── 三种支付介质与免费额度 ──
+  allowRmb            Boolean  @default(true) // 允许人民币现金微信支付
+  priceRmbCents       Int      @default(0)    // 人民币发帖单价(分)
+  allowCoin           Boolean  @default(true) // 允许金币支付
+  priceCoins          Int      @default(0)    // 金币发帖价格(枚)
+  allowPoint          Boolean  @default(false)// 允许积分支付
+  pricePoints         Int      @default(0)    // 积分发帖价格(分)
+  freeQuota           Int      @default(1)    // 周期内免费额度(条)
+  quotaPeriod         String   @default("30D")// 额度周期: ONCE | DAILY | 7D | 30D | 365D
+  validDays           Int      @default(30)   // 信息展现有效期(天)
+
+  // ── 增值服务多介质支持 ──
+  pinnedAllowRmb      Boolean  @default(true)
+  pinnedPriceRmbCents Int      @default(500)
+  pinnedAllowCoin     Boolean  @default(true)
+  pinnedPriceCoins    Int      @default(50)
+  pinnedAllowPoint    Boolean  @default(false)
+  pinnedPricePoints   Int      @default(500)
+
+  highlightAllowRmb   Boolean  @default(true)
+  highlightPriceRmbCents Int   @default(300)
+  highlightAllowCoin  Boolean  @default(true)
+  highlightPriceCoins Int      @default(30)
+
+  refreshAllowRmb     Boolean  @default(true)
+  refreshPriceRmbCents Int     @default(100)
+  refreshAllowCoin    Boolean  @default(true)
+  refreshPriceCoins   Int      @default(10)
+  refreshAllowPoint   Boolean  @default(false)
+  refreshPricePoints  Int      @default(100)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ==========================================
+// B2B/B2C 会员等级包 (招聘企业包/相亲VIP/商家年费)
+// ==========================================
+
+model MemberVipPackage {
+  id           String           @id @default(cuid())
+  targetModule String // JOB=招聘企业包 | LOVE=相亲VIP | SHOP=商家入驻年费
+  name         String // 套餐名称: 如「企业季度直聘包」「至尊红娘相亲VIP」「金牌商家入驻年卡」
+  level        Int              @default(1) // 1=初级/体验, 2=中级/标准, 3=高级/旗舰
+  priceCents   Int // 价格(分)
+  durationDays Int // 有效时长(天) 如 30, 90, 365
+  privileges   Json // 权益配额 JSON: { maxJobs: 20, maxResumes: 50, matchTimes: 5, giftPinnedDays: 7 }
+  description  String?
+  badgeText    String? // 尊贵角标: 如「企业认证」「相亲VIP」「金牌商家」
+  isEnabled    Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  memberships  UserMembership[]
+
+  @@index([targetModule, isEnabled])
+}
+
+model UserMembership {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId      String
+  package        MemberVipPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  targetModule   String // JOB | LOVE | SHOP
+  startDate      DateTime         @default(now())
+  expireDate     DateTime
+  status         String           @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+  remainingQuota Json // 当前剩余配额: { remainingJobs: 15, remainingResumes: 42, matchTimes: 3 }
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([userId, targetModule, status])
+}
+
+// ==========================================
+// 分类信息细分子类独立定价 (如拼车细分项、二手等)
+// ==========================================
+
+model SubCategoryPricing {
+  id               String   @id @default(cuid())
+  moduleKey        String // 所属板块: listing | house | shop 等
+  subKey           String // 子类标识: car_look_person | person_look_car | car_daily | second_hand 等
+  subName          String // 子类名称: 如「车找人」「人找车」「天天发车」
+  unitPrice        Int      @default(0) // 基础发布价格(分)
+  freePostCount    Int      @default(0) // 免费发布额度(条)
+  pinnedPriceDaily Int      @default(500) // 置顶日单价(分)
+  refreshPriceOnce Int      @default(100) // 刷新单次费用(分)
+  isFree           Boolean  @default(false)
+  isEnabled        Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([moduleKey, subKey])
+}
+
+// ==========================================
+// 虚拟代币与钱包余额体系 (杨林金币)
+// ==========================================
+
+model CoinWallet {
+  id             String            @id @default(cuid())
+  userId         String            @unique
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance        Int               @default(0) // 金币余额 (1元 = 10金币)
+  totalRecharged Int               @default(0) // 累计充值金币
+  totalSpent     Int               @default(0) // 累计消费金币
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  transactions   CoinTransaction[]
+}
+
+model CoinTransaction {
+  id            String     @id @default(cuid())
+  walletId      String
+  wallet        CoinWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount        Int // 正数 = 获得/充值, 负数 = 消耗/扣费
+  type          String // RECHARGE=微信充值 | CHECKIN_GIFT=签到赠币 | POST_FEE=发帖扣费 | PIN_FEE=置顶扣费 | REFRESH_FEE=刷新扣费 | VIP_BUY=购买会员 | ADMIN_GRANT=管理员赠送
+  orderNo       String?    // 关联的充值或支付订单号
+  remark        String
+  balanceBefore Int        @default(0)
+  balanceAfter  Int        @default(0)
+  businessType  String?    // PUBLISH | TOP | REFRESH | RECHARGE | REFUND
+  businessId    String?    // 业务实体 ID (如 Job ID / Order ID)
+  createdAt     DateTime   @default(now())
+
+  @@index([walletId, createdAt])
+}
+
+// ==========================================
+// 付费查看联系方式 (金币扣费解锁)
+// ==========================================
+
+model ContactPurchase {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetKind String // "house" | "job" | "listing"
+  targetId   String
+  coinsPaid  Int // 本次扣除的金币数
+  phone      String // 解锁时的联系电话快照
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetKind, targetId])
+  @@index([userId])
+}
+
+// ==========================================
+// Phase 44 Pro Max Enterprise System Models
+// ==========================================
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  group       String // SITE | SEO | FOOTER | CONTACT | NOTICE | UPLOAD | REGISTRATION | CONTENT
+  key         String   @unique
+  value       String
+  valueType   String   @default("string") // string | number | boolean | json
+  description String?
+  isPublic    Boolean  @default(true)
+  isEncrypted Boolean  @default(false)
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([group])
+}
+
+model IntegrationConfig {
+  id        String    @id @default(cuid())
+  provider  String    @unique // WEPAY | WEXIN | SMS | MAIL | OSS | AI | MAP
+  config    Json
+  status    String    @default("UNCONFIGURED") // UNCONFIGURED | CONFIGURING | NORMAL | ERROR
+  lastCheck DateTime?
+  updatedBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model FeatureFlag {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  name        String
+  description String?
+  enabled     Boolean   @default(true)
+  scope       String    @default("GLOBAL") // GLOBAL | MODULE | USER
+  targetType  String    @default("ALL") // ALL | USER | ORGANIZATION | PERCENTAGE
+  targetList  String[]  @default([])
+  percentage  Int       @default(100)
+  startAt     DateTime?
+  endAt       DateTime?
+  updatedBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique // menu.view | button.edit | api.delete
+  name        String
+  type        String           @default("MENU") // MENU | BUTTON | API
+  module      String // CONTENT | USER | BILLING | SYSTEM
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([role, permissionId])
+}
+
+model AdminMenu {
+  id            String   @id @default(cuid())
+  name          String
+  path          String
+  icon          String?
+  parentId      String?
+  sort          Int      @default(0)
+  permissionKey String?
+  enabled       Boolean  @default(true)
+  isSystem      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DictionaryType {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  name        String
+  description String?
+  enabled     Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  items       DictionaryItem[]
+}
+
+model DictionaryItem {
+  id        String         @id @default(cuid())
+  typeId    String
+  type      DictionaryType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  label     String
+  value     String
+  sort      Int            @default(0)
+  enabled   Boolean        @default(true)
+  extra     Json? // icon, color, hot, recommend
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([typeId, value])
+  @@index([typeId])
+}
+
+model Region {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  parentId  String?
+  level     Int      @default(1) // 1: Province, 2: City, 3: District, 4: Town/Campus
+  sort      Int      @default(0)
+  enabled   Boolean  @default(true)
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+model Tag {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  slug         String   @unique
+  resourceType String   @default("GLOBAL")
+  usageCount   Int      @default(0)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AdPlacement {
+  id          String          @id @default(cuid())
+  key         String          @unique // HOME_BANNER | LISTING_TOP | SHOP_RECOMMEND
+  name        String
+  description String?
+  width       Int             @default(1200)
+  height      Int             @default(300)
+  enabled     Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  ads         Advertisement[]
+}
+
+model Advertisement {
+  id          String      @id @default(cuid())
+  placementId String
+  placement   AdPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  title       String
+  image       String
+  link        String
+  startAt     DateTime?
+  endAt       DateTime?
+  status      String      @default("ACTIVE") // ACTIVE | EXPIRED | DISABLED
+  sort        Int         @default(0)
+  clickCount  Int         @default(0)
+  viewCount   Int         @default(0)
+  createdBy   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([placementId])
+}
+
+model Recommendation {
+  id           String    @id @default(cuid())
+  position     String // HOME_FEATURED | HOT_JOB | FEATURED_HOUSE | RECOMMENDED_SHOP
+  resourceType String // JOB | HOUSE | LISTING | SHOP | EVENT | DATING | POST
+  resourceId   String
+  weight       Int       @default(0)
+  startAt      DateTime?
+  endAt        DateTime?
+  status       String    @default("ACTIVE")
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([position, status])
+}
+
+model PointAccount {
+  id           String             @id @default(cuid())
+  userId       String             @unique
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance      Int                @default(0)
+  totalEarned  Int                @default(0)
+  totalSpent   Int                @default(0)
+  lastCheckin  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  transactions PointTransaction[]
+}
+
+model PointTransaction {
+  id        String       @id @default(cuid())
+  accountId String
+  account   PointAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  amount        Int // positive = earn, negative = spend
+  type          String // CHECKIN | PUBLISH | AVATAR | COMMENT | FAVORITED | ADMIN_ADJUST | SPEND
+  remark        String
+  balanceBefore Int          @default(0)
+  balanceAfter  Int          @default(0)
+  businessType  String?      // PUBLISH | TOP | REFRESH | CHECKIN | REDEEM
+  businessId    String?      // 业务实体 ID (如 Job ID / Coupon ID)
+  createdAt     DateTime     @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+model MediaFile {
+  id           String           @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  extension    String
+  size         Int
+  storage      String           @default("LOCAL") // LOCAL | OSS
+  path         String
+  url          String
+  hash         String?          @unique
+  uploadedBy   String?
+  usageCount   Int              @default(0)
+  createdAt    DateTime         @default(now())
+  deletedAt    DateTime?
+  references   MediaReference[]
+
+  @@index([mimeType])
+}
+
+model MediaReference {
+  id           String    @id @default(cuid())
+  mediaId      String
+  media        MediaFile @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  resourceType String
+  resourceId   String
+  createdAt    DateTime  @default(now())
+
+  @@unique([mediaId, resourceType, resourceId])
+}
+
+model MessageCampaign {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  channel   String   @default("INBOX") // INBOX | EMAIL | SMS | WECHAT
+  target    String   @default("ALL") // ALL | USER | ROLE
+  targetId  String?
+  status    String   @default("DRAFT") // DRAFT | SENT | CANCELLED
+  sentCount Int      @default(0)
+  failCount Int      @default(0)
+  readCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ScheduledTask {
+  id         String    @id @default(cuid())
+  key        String    @unique
+  name       String
+  schedule   String // Cron expression e.g. '0 0 * * *'
+  enabled    Boolean   @default(true)
+  lastRunAt  DateTime?
+  lastStatus String? // SUCCESS | FAILED
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  runs       TaskRun[]
+}
+
+model TaskRun {
+  id         String        @id @default(cuid())
+  taskId     String
+  task       ScheduledTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  status     String        @default("RUNNING") // RUNNING | SUCCESS | FAILED
+  message    String?
+
+  @@index([taskId])
+}
+
+// 便民电话分类
+model PhoneCategory {
+  id        String       @id @default(cuid())
+  name      String // 分类名称: 急救报警、水电维修、快递外卖...
+  icon      String? // emoji图标
+  sortOrder Int          @default(0)
+  status    String       @default("ACTIVE") // ACTIVE | DISABLED
+  createdAt DateTime     @default(now())
+  phones    PhoneEntry[]
+}
+
+// 便民电话条目
+model PhoneEntry {
+  id          String        @id @default(cuid())
+  categoryId  String
+  category    PhoneCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String // 名称: 杨林派出所、自来水公司...
+  phone       String // 电话号码
+  address     String? // 地址
+  description String? // 简要说明
+  sortOrder   Int           @default(0)
+  isHot       Boolean       @default(false) // 是否热门
+  status      String        @default("APPROVED") // APPROVED | OFFLINE
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+// ==========================================
+// 微信公众号运营系统 — P0 基础模型
+// ==========================================
+
+// 渠道二维码
+model WechatQrCode {
+  id             String    @id @default(cuid())
+  name           String // 二维码名称：如"招聘海报"
+  scene          String    @unique // 场景值（唯一标识）
+  type           String    @default("TEMP") // TEMP=临时 | PERM=永久
+  expireAt       DateTime? // 临时二维码过期时间
+  wechatTicket   String? // 微信返回的 ticket
+  qrUrl          String? // 二维码图片URL
+  targetType     String    @default("WELCOME") // WELCOME=差异化欢迎 | URL=跳转 | TAG=自动标签
+  targetValue    String? // 对应目标值（如自定义欢迎语、跳转URL）
+  welcomeMsg     String? // 差异化欢迎语（覆盖默认）
+  autoTagIds     String[]  @default([]) // 自动打标签ID列表
+  enabled        Boolean   @default(true)
+  scanCount      Int       @default(0) // 扫描次数
+  subscribeCount Int       @default(0) // 通过此码关注人数
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([scene])
+}
+
+// 用户标签
+model WechatUserTag {
+  id          String              @id @default(cuid())
+  name        String              @unique // 标签名：如"招聘用户"、"杨林大学城"
+  category    String              @default("SYSTEM") // SYSTEM=系统标签 | INTEREST=兴趣标签 | IDENTITY=身份标签 | REGION=区域标签 | CUSTOM=运营标签
+  color       String              @default("#3b82f6") // 标签颜色
+  description String?
+  wechatTagId Int? // 微信端标签ID（如果已同步到微信）
+  autoRule    Json? // 自动标签规则 {eventType, threshold, windowDays}
+  enabled     Boolean             @default(true)
+  usageCount  Int                 @default(0)
+  createdBy   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  relations   WechatTagRelation[]
+
+  @@index([category])
+}
+
+// 用户-标签关联
+model WechatTagRelation {
+  id         String         @id @default(cuid())
+  followerId String
+  follower   WechatFollower @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        WechatUserTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  source     String         @default("MANUAL") // MANUAL=人工 | AUTO=自动规则 | QR=二维码 | SYSTEM=系统
+  createdAt  DateTime       @default(now())
+
+  @@unique([followerId, tagId])
+  @@index([tagId])
+}
+
+// 用户行为记录
+model WechatUserEvent {
+  id         String          @id @default(cuid())
+  openId     String
+  followerId String?
+  follower   WechatFollower? @relation(fields: [followerId], references: [id], onDelete: SetNull)
+  userId     String?
+  eventType  String // FOLLOW | UNFOLLOW | SCAN_QR | KEYWORD | MENU_CLICK | WEB_LOGIN | ACCOUNT_BIND | AD_INQUIRY | CUSTOMER_SERVICE
+  eventName  String? // 具体事件名：如关键词内容、菜单名、二维码场景
+  eventValue String? // 附加值：如匹配的关键词组名、菜单URL
+  source     String? // 来源：如二维码场景值
+  createdAt  DateTime        @default(now())
+
+  @@index([openId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([followerId])
+}
+
+// 客服咨询会话
+model WechatCustomerConversation {
+  id            String          @id @default(cuid())
+  openId        String
+  followerId    String?
+  follower      WechatFollower? @relation(fields: [followerId], references: [id], onDelete: SetNull)
+  userId        String?
+  category      String          @default("GENERAL") // GENERAL=一般咨询 | ADVERTISING=广告合作 | MERCHANT=商家入驻 | RECRUITMENT=企业招聘 | COMPLAINT=投诉 | OTHER=其他
+  status        String          @default("WAITING") // WAITING=待处理 | PROCESSING=处理中 | CLOSED=已关闭
+  lastMessage   String? // 最近一条消息
+  lastMessageAt DateTime?
+  assignedTo    String? // 分配给谁处理
+  note          String? // 处理备注
+  closedAt      DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([status])
+  @@index([openId])
+  @@index([createdAt])
+}
+
+// 商业线索
+model BusinessLead {
+  id         String          @id @default(cuid())
+  openId     String
+  followerId String?
+  follower   WechatFollower? @relation(fields: [followerId], references: [id], onDelete: SetNull)
+  userId     String?
+  type       String          @default("OTHER") // ADVERTISING=广告 | MERCHANT=商家入驻 | RECRUITMENT=企业招聘 | OTHER=其他
+  source     String          @default("WECHAT") // WECHAT=公众号 | WEB=网站 | QR=二维码
+  content    String? // 用户消息内容
+  status     String          @default("NEW") // NEW=新线索 | FOLLOWING=跟进中 | CONTACTED=已联系 | QUOTED=已报价 | CLOSED=已成交 | INVALID=无效
+  assignedTo String?
+  note       String? // 跟进备注
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([openId])
+  @@index([createdAt])
+}
+
+// 消息通知模板
+model WechatNotificationTemplate {
+  id          String   @id @default(cuid())
+  scene       String   @unique // 场景标识：CONTENT_APPROVED | CONTENT_REJECTED | JOB_PUBLISHED | HOUSE_PUBLISHED | AD_START | AD_EXPIRING
+  name        String // 场景名称
+  templateId  String? // 微信模板消息ID
+  enabled     Boolean  @default(false)
+  titleField  String? // 标题字段映射
+  contentMap  Json? // 内容字段映射 {first, keyword1, keyword2, remark}
+  jumpUrl     String? // 点击跳转URL模板
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 消息发送日志
+model WechatMessageLog {
+  id         String   @id @default(cuid())
+  openId     String
+  userId     String?
+  msgType    String // TEMPLATE=模板消息 | CUSTOM=客服消息 | AUTO_REPLY=自动回复
+  templateId String? // 使用的模板ID
+  scene      String? // 通知场景
+  content    String? // 发送内容摘要
+  status     String   @default("SENT") // SENT=已发送 | FAILED=失败 | BLOCKED=被屏蔽
+  errorCode  Int? // 微信错误码
+  errorMsg   String? // 微信错误信息
+  retryCount Int      @default(0)
+  sentAt     DateTime @default(now())
+
+  @@index([openId])
+  @@index([status])
+  @@index([sentAt])
+  @@index([scene])
+}
+
+// 消息幂等（防重复处理微信消息）
+model WechatMsgIdempotent {
+  msgId     String   @id // 微信消息MsgId
+  openId    String
+  processed Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// 欢迎流程（关注后多步骤消息编排）
+model WelcomeFlow {
+  id          String            @id @default(cuid())
+  name        String // 流程名称，如"默认欢迎流程"、"招聘渠道流程"
+  scene       String?           @unique // 关联渠道场景值，null=默认流程
+  description String?
+  enabled     Boolean           @default(true)
+  isDefault   Boolean           @default(false) // 是否为默认欢迎流程
+  priority    Int               @default(0) // 优先级，值越大越优先
+  steps       WelcomeFlowStep[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([enabled, isDefault])
+  @@index([scene])
+}
+
+// 欢迎流程步骤
+model WelcomeFlowStep {
+  id          String      @id @default(cuid())
+  flowId      String
+  flow        WelcomeFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  order       Int         @default(0) // 发送顺序
+  type        String // TEXT, NEWS, IMAGE, LINK
+  // TEXT 字段
+  content     String?     @db.Text // 文本内容（支持<a>标签）
+  // NEWS 图文字段
+  title       String?
+  description String?
+  imageUrl    String? // 封面图URL
+  linkUrl     String? // 点击跳转URL
+  // IMAGE 字段
+  mediaId     String? // 微信素材mediaId
+  // 通用
+  enabled     Boolean     @default(true)
+  delayMs     Int         @default(0) // 发送延迟毫秒（受微信接口限制）
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([flowId, order])
+}
+
+// Login identities are separate from the platform member record. This table
+// already exists in production and is the compatibility bridge for old users.
+model AuthAccount {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String // PASSWORD | PHONE | WECHAT | ADMIN
+  providerAccountId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+
+  @@unique([userId, provider])
+  @@index([provider, providerAccountId])
+  @@index([userId])
+}
+
+// Canonical WeChat identity. Legacy User.wechat* fields remain during the
+// compatibility period and are dual-written by the account service.
+model WechatAccount {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appId         String
+  openId        String
+  unionId       String?
+  nickname      String?
+  avatarUrl     String?
+  subscribed    Boolean   @default(false)
+  subscribeAt   DateTime?
+  unsubscribeAt DateTime?
+  boundAt       DateTime  @default(now())
+  lastSyncAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([appId, openId])
+  @@index([userId])
+  @@index([unionId])
+}
+
+// Append-only login audit trail.
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  provider  String
+  ip        String?
+  userAgent String?
+  success   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// ==========================================
+// 园区招商 / 工业地产 (Industrial Property)
+// ==========================================
+
+enum IndustrialPropertyType {
+  FACTORY             // 厂房
+  WAREHOUSE           // 仓库
+  LAND                // 土地 / 地皮
+  OFFICE              // 办公楼
+  INDUSTRIAL_PARK     // 产业园物业
+  COMMERCIAL_SUPPORT  // 园区商业配套
+  OTHER               // 其他
+}
+
+enum IndustrialTransactionType {
+  RENT                // 出租
+  SALE                // 出售
+  TRANSFER            // 转让
+  COOPERATION         // 合作
+  JOINT_OPERATION     // 联营
+  WANTED_RENT         // 求租
+  WANTED_BUY          // 求购
+}
+
+enum IndustrialStatus {
+  DRAFT               // 草稿
+  PENDING             // 待审核
+  PUBLISHED           // 已发布
+  REJECTED            // 审核失败
+  OFFLINE             // 已下架
+  EXPIRED             // 已过期
+}
+
+enum IndustrialVerifiedLevel {
+  NONE                // 普通发布
+  PHONE_VERIFIED      // 电话已核验
+  OWNER_VERIFIED      // 业主已核验
+  ENTERPRISE_VERIFIED // 企业已认证
+}
+
+model IndustrialProperty {
+  id                        String                    @id @default(cuid())
+  userId                    String?
+  user                      User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // 核心信息
+  title                     String
+  description               String
+  propertyType              IndustrialPropertyType    @default(FACTORY)
+  transactionType           IndustrialTransactionType @default(RENT)
+  status                    IndustrialStatus          @default(PUBLISHED)
+  rejectReason              String?
+
+  // 区域与园区
+  region                    String                    @default("杨林经开区")
+  parkName                  String?
+  address                   String
+  latitude                  Float?
+  longitude                 Float?
+
+  // 面积指标 (㎡ 或 亩)
+  buildingArea              Float?
+  factoryArea               Float?
+  landArea                  Float?
+  officeArea                Float?
+
+  // 商务与价格
+  rentPrice                 Float?
+  salePrice                 Float?
+  priceUnit                 String                    @default("元/㎡/月")
+  negotiable                Boolean                   @default(false)
+
+  // 厂房 / 仓库工程技术参数
+  floorHeight               Float?
+  floorCount                Int?                      @default(1)
+  isSingleFloor             Boolean                   @default(true)
+  loadBearing               Float?
+  columnSpacing             String?
+  powerCapacity             Int?
+  hasCrane                  Boolean                   @default(false)
+  craneTonnage              Float?
+
+  // 环保与基础设施
+  hasGas                    Boolean                   @default(false)
+  hasWater                  Boolean                   @default(true)
+  hasDrainage               Boolean                   @default(true)
+  hasFireSystem             Boolean                   @default(true)
+  fireStatus                String?                   @default("丙类")
+  hasEnvironmentalCondition Boolean                   @default(false)
+
+  // 交通与物流装卸
+  truckAccessible           Boolean                   @default(true)
+  maxTruckLength            String?                   @default("17.5米")
+  roadWidth                 Float?
+  hasLoadingDock            Boolean                   @default(false)
+
+  // 配套设施
+  hasOffice                 Boolean                   @default(false)
+  hasDormitory              Boolean                   @default(false)
+  hasCanteen                Boolean                   @default(false)
+  hasParking                Boolean                   @default(true)
+  parkingCount              Int?
+
+  // 土地地皮专有属性
+  landUseType               String?
+  propertyRightStatus       String?
+  canSplit                  Boolean                   @default(false)
+  canBuild                  Boolean                   @default(true)
+
+  // 招商合作与商务条款
+  cooperationDemand         String?
+  minimumLeaseTerm          String?                   @default("1年")
+  availableDate             String?                   @default("随时可进驻")
+  suitableIndustries        String[]                  @default([])
+
+  // 联系人与认证体系
+  contactName               String
+  contactPhone              String
+  verifiedLevel             IndustrialVerifiedLevel   @default(NONE)
+
+  // 运营指标
+  featured                  Boolean                   @default(false)
+  isTop                     Boolean                   @default(false)
+  topUntil                  DateTime?
+
+  viewCount                 Int                       @default(0)
+  favoriteCount             Int                       @default(0)
+
+  // 多媒体
+  images                    String[]                  @default([])
+
+  // 时间
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  publishedAt               DateTime                  @default(now())
+
+  @@index([propertyType])
+  @@index([transactionType])
+  @@index([region])
+  @@index([status])
+  @@index([isTop, createdAt])
+}
+
+// ==========================================
+// 便民信息 P1 商业化推广与服务生态模型
+// ==========================================
+
+model ListingPromotion {
+  id             String      @id @default(cuid())
+  orderNo        String      @unique
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType   String      @default("LISTING")
+  resourceId     String
+  listing        Listing     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  promotionType  String      // TOP_3_DAYS | TOP_7_DAYS | CATEGORY_FEATURED | HOME_FEATURED
+  amountCents    Int
+  status         String      @default("PENDING_PAYMENT") // PENDING_PAYMENT | ACTIVE | EXPIRED | CANCELLED | REFUNDED
+  source         String      @default("PAID") // PAID (自费) | ADMIN (人工赠送/置顶)
+  startAt        DateTime?
+  endAt          DateTime?
+  paymentOrderId String?     // 关联 BillingOrder.id
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([resourceId, status])
+  @@index([userId])
+  @@index([status, endAt])
+}
+
+model ServiceProvider {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String    // 个人真实姓名或店铺企业名称
+  avatar             String?   // 个人头像或门店门头 Logo
+  serviceCategory    String    // 主营类别 (家政维修/电脑数码/特色餐饮/商务财税/技能培训等)
+  serviceAreas       String[]  @default([]) // 覆盖服务区域 (如 杨林经开区, 杨林大学城)
+  phone              String    // 服务热线/手机号
+  wechat             String?   // 微信号
+  yearsOfService     String?   // 从业年限 (如 "5年经验")
+  address            String?   // 公开经营地址 / 门店位置
+  intro              String    // 服务介绍与专业特长
+  licenseImages      String[]  @default([]) // 营业执照或资格证书实拍
+  verificationType   String    @default("SERVICE_VERIFIED") // PHONE_VERIFIED | REAL_NAME_VERIFIED | MERCHANT_VERIFIED | SERVICE_VERIFIED | ENTERPRISE_VERIFIED
+  verificationStatus String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  rejectReason       String?   // 驳回说明
+  verifiedAt         DateTime?
+  validUntil         DateTime? // 认证有效期
+  reviewerId         String?
+  isMember           Boolean   @default(false) // 商家会员
+  memberUntil        DateTime?
+  sortOrder          Int       @default(0)
+  operatingStatus    String    @default("OPEN") // OPEN (接单中) | BUSY (稍忙) | PAUSED (暂停接单)
+  businessHours      String?   @default("08:00 - 20:00")
+  ratingAvg          Float     @default(5.0)
+  ratingCount        Int       @default(0)
+  completedOrders    Int       @default(0)
+  assignedRequests   ServiceRequest[] @relation("ProviderAssignedRequests")
+  leads              ServiceLead[]
+  reviews            Review[]
+  contactEvents      ContactEvent[]
+  coupons            ServiceCoupon[]
+  commissionRate     Float?    // 商家专属特殊抽佣比例 (如 0.06 即 6%)
+  pendingBalance     Int       @default(0) // 在途履约冻结资金 (分)
+  availableBalance   Int       @default(0) // 可申请结算提现资金 (分)
+  settledAmount      Int       @default(0) // 历史累计已结算出金 (分)
+  products           ServiceProduct[]
+  serviceOrders      ServiceOrder[]   @relation("ProviderServiceOrders")
+  settlements        Settlement[]
+  followers          FollowProvider[]
+  campaigns          MerchantCampaign[]
+  customerNotes      ProviderCustomerNote[]
+  organizations      Organization[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([serviceCategory, verificationStatus])
+  @@index([verificationStatus])
+  @@index([operatingStatus])
+}
+
+model PromotionPackage {
+  id                 String   @id @default(cuid())
+  packageKey         String   @unique // TOP_3_DAYS | TOP_7_DAYS | CATEGORY_FEATURED | HOME_FEATURED | MERCHANT_BADGE | MEMBER_PLAN
+  name               String   // 3天分类置顶 | 7天分类置顶 | 分类精选推荐 | 首页大厅推荐 | 商家认证年费 | 商家会员月包
+  category           String   // PROMOTION | VERIFICATION | MEMBERSHIP
+  priceCents         Int      // 价格(分)
+  originalPriceCents Int?     // 划线原价(分)
+  durationDays       Int      // 有效期(天)
+  benefits           String[] // 权益点: ["分类列表顶部展示", "专属金黄色高亮标牌", "优先曝光"]
+  description        String?
+  enabled            Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ==========================================
+// 便民信息 P2 本地需求撮合 + 服务线索 + 商家经营工具
+// ==========================================
+
+model ServiceRequest {
+  id                 String            @id @default(cuid())
+  requestNo          String            @unique // e.g. REQ-20260913-XXXX
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String            // 需求标题，如 "大学城怡园急需修下水管漏水"
+  category           String            // 家电维修 | 管道疏通 | 开锁换锁 | 家政保洁 | 房屋修缮 | 搬家拉货 | 数码电脑 | 便民跑腿 | 其它
+  area               String            // 杨林大学城 | 杨林经开区 | 杨林老城区 | 职教园区 | 嘉丽泽 | 杨林全区
+  addressDetail      String?           // 具体地点/小区（保护隐私，仅接单服务商可见）
+  budgetMin          Int?              // 最低预算(分)
+  budgetMax          Int?              // 最高预算(分)
+  preferredTime      String            // 尽快上门 | 今天内 | 明天 | 周末 | 电话沟通协商
+  urgency            String            @default("NORMAL") // URGENT (加急) | NORMAL (正常) | FLEXIBLE (灵活)
+  description        String            // 详细故障/需求描述
+  images             String[]          @default([])
+  contactName        String            // 客户称呼，如 "张先生"
+  contactPhone       String            // 联系手机号
+  contactWechat      String?           // 微信号
+  status             String            @default("PENDING_MATCH") // PENDING_MATCH | MATCHED | IN_PROGRESS | COMPLETED | CANCELLED | EXPIRED
+  cancelReason       String?
+  selectedProviderId String?
+  selectedProvider   ServiceProvider?  @relation("ProviderAssignedRequests", fields: [selectedProviderId], references: [id], onDelete: SetNull)
+  leads              ServiceLead[]
+  contactEvents      ContactEvent[]
+  review             Review?
+  serviceOrder       ServiceOrder?
+  expiresAt          DateTime          // 默认发布后 15 天
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([category, status])
+  @@index([area, status])
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+model ServiceLead {
+  id             String          @id @default(cuid())
+  requestId      String
+  request        ServiceRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  providerId     String
+  provider       ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  status         String          @default("NEW") // NEW (新匹配) | VIEWED (已查看) | CONTACTED (已联系) | ACCEPTED (已接单) | DECLINED (谢绝) | COMPLETED (已完成)
+  isUnlocked     Boolean         @default(false) // 是否已解锁查看完整脱敏电话
+  unlockedAt     DateTime?
+  viewedAt       DateTime?
+  contactedAt    DateTime?
+  acceptedAt     DateTime?
+  completedAt    DateTime?
+  notes          String?         // 商家内部跟进备注
+  stage          String          @default("NEW") // NEW | CONTACTED | FOLLOWING | WON | LOST
+  nextFollowAt   DateTime?
+  followUps      LeadFollowUp[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([requestId, providerId])
+  @@index([providerId, status])
+  @@index([requestId])
+}
+
+model ContactEvent {
+  id           String           @id @default(cuid())
+  userId       String?
+  user         User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  providerId   String?
+  provider     ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  requestId    String?
+  request      ServiceRequest?  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  listingId    String?
+  listing      Listing?         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  action       String           // CALL (点击拨打电话) | COPY_PHONE (复制电话) | COPY_WECHAT (复制微信) | CLICK_CONSULT (咨询联系) | VIEW_PROFILE (查看主页)
+  source       String           @default("REQUEST_DETAIL") // REQUEST_MATCH | REQUEST_DETAIL | PROVIDER_PROFILE | PROVIDER_CENTER | INFO_DETAIL
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime         @default(now())
+
+  @@index([providerId, action, createdAt])
+  @@index([requestId, action])
+  @@index([listingId, action])
+  @@index([createdAt])
+}
+
+model Review {
+  id           String          @id @default(cuid())
+  requestId    String?         @unique // P2 需求单关联 (一单只能评价一次)
+  request      ServiceRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  orderId      String?         @unique // P3 交易订单关联 (一单只能评价一次)
+  order        ServiceOrder?   @relation("OrderReview", fields: [orderId], references: [id], onDelete: Cascade)
+  providerId   String
+  provider     ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating       Int             // 1 - 5 星
+  tags         String[]        @default([]) // 响应迅速、准时上门、收费合理、技术专业等
+  content      String          // 真实评价内容 (5-500字)
+  images       String[]        @default([]) // 完工实拍图
+  status       String          @default("APPROVED") // APPROVED (正常展示) | PENDING (审核中) | HIDDEN (已隐藏)
+  replyContent String?         // 服务商回复
+  replyAt      DateTime?       // 服务商回复时间
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([providerId, status, createdAt])
+  @@index([userId])
+}
+
+model ServiceCoupon {
+  id                  String           @id @default(cuid())
+  providerId          String?          // null 则为平台通用券
+  provider            ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  title               String           // 如 "新客上门立减券", "杨林生活节·全场立减10元"
+  issuerType          String           @default("PROVIDER") // PROVIDER (商家券) | PLATFORM (平台券)
+  couponType          String           @default("FIXED") // FIXED (满减券) | DISCOUNT (折扣券) | NEW_USER (新客券) | REPEAT (复购券)
+  discountCents       Int              // 减免金额(分)，如 2000 (20元)
+  valueCents          Int              @default(0) // 立减分，或折扣比例 (如 85 代表 8.5折)
+  maxDiscountCents    Int?             // 折扣券封顶优惠(分)
+  minSpendCents       Int              @default(0) // 最低消费门槛(分)，如 5000 (满50元)
+  applicableScope     String           @default("ALL") // ALL (全场/全品类) | CATEGORY (指定品类) | PRODUCT (指定服务商品)
+  applicableCategory  String?          // 适用分类 (如 "家电维修")
+  applicableProductId String?          // 适用具体单品
+  totalQuantity       Int              @default(100) // 发放总量
+  receivedQuantity    Int              @default(0) // 已领数量
+  usedQuantity        Int              @default(0) // 已核销数量
+  perUserLimit        Int              @default(1) // 每人限领张数
+  validDays           Int              @default(30)
+  startAt             DateTime?
+  endAt               DateTime?
+  description         String?
+  enabled             Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  userCoupons         UserCoupon[]
+
+  @@index([providerId, enabled])
+  @@index([issuerType, enabled])
+  @@index([couponType, enabled])
+}
+
+// 用户领取的优惠券
+model UserCoupon {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couponId       String
+  coupon         ServiceCoupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  status         String         @default("AVAILABLE") // AVAILABLE (可使用) | USED (已使用) | EXPIRED (已过期)
+  receivedAt     DateTime       @default(now())
+  expiresAt      DateTime
+  usedAt         DateTime?
+  usedOrderId    String?
+  usedOrder      ServiceOrder?  @relation("OrderUsedCoupons", fields: [usedOrderId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([userId, status])
+  @@index([couponId, status])
+  @@index([usedOrderId])
+}
+
+// 关注服务商 (区别于收藏单条信息)
+model FollowProvider {
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId     String
+  provider       ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+
+  @@unique([userId, providerId])
+  @@index([providerId])
+  @@index([userId])
+}
+
+// 店铺营销活动 (开学季、换季保养、老客特惠等)
+model MerchantCampaign {
+  id             String          @id @default(cuid())
+  providerId     String
+  provider       ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  title          String          // 活动标题，如 "开学季·大学城数码维修特惠"
+  subtitle       String?         // 副标题，如 "凭学生证再减10元"
+  badgeText      String?         // 角标，如 "限时特惠" | "老客专享" | "开学季"
+  bannerImage    String?         // 活动海报图
+  content        String          // 活动详情与细则
+  discountRate   Float?          // 折扣比例，如 0.85
+  discountCents  Int?            // 立减分，如 2000
+  couponId       String?         // 关联的优惠券ID
+  startAt        DateTime
+  endAt          DateTime
+  status         String          @default("ACTIVE") // ACTIVE | PENDING_REVIEW | ENDED | REJECTED
+  rejectReason   String?
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([providerId, status])
+  @@index([status, endAt])
+}
+
+// 用户偏好与轻量推荐
+model UserPreference {
+  id                       String   @id @default(cuid())
+  userId                   String   @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredCategories      String[] @default([]) // 常用偏好分类，如 ["家电维修", "管道疏通"]
+  preferredArea            String?  // 常住片区，如 "杨林大学城"
+  notifyOnFollowNewProduct Boolean  @default(true) // 关注商家发布新服务通知
+  notifyOnFollowCampaign   Boolean  @default(true) // 关注商家新活动通知
+  notifyOnCouponExpiring   Boolean  @default(true) // 优惠券即将过期提醒
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+// 商家 CRM 客户画像、内部标签与回访提醒 (数据严格租户隔离)
+model ProviderCustomerNote {
+  id                String          @id @default(cuid())
+  providerId        String
+  provider          ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  customerId        String          // 对应 User.id
+  tags              String[]        @default([]) // 内部标签: ["老客户", "高频客户", "待回访", "企业客户", "品质挑剔", "已推荐朋友"]
+  notes             String?         // 内部服务备忘与跟进日志
+  nextFollowUpAt    DateTime?       // 下次保养/回访提醒日期
+  followUpCompleted Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([providerId, customerId])
+  @@index([providerId, nextFollowUpAt])
+}
+
+// ==========================================
+// 便民信息 P3 本地服务在线交易平台模型
+// ==========================================
+
+// 用户服务地址
+model UserAddress {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactName   String         // 联系人姓名
+  phone         String         // 联系电话
+  area          String         // 所属片区 (杨林大学城 | 杨林经开区 | 杨林老城区 | 嵩明主城区 | 职教园区)
+  addressDetail String         // 详细门牌/小区地址 (接单前隐私保护)
+  tag           String?        // 标签：家 | 公司 | 宿舍 | 其它
+  isDefault     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  orders        ServiceOrder[]
+
+  @@index([userId, isDefault])
+}
+
+// 标准化服务商品
+model ServiceProduct {
+  id              String          @id @default(cuid())
+  providerId      String
+  provider        ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category        String          // 家电维修 | 管道疏通 | 开锁换锁 | 家政保洁 | 房屋修缮 | 搬家拉货 | 数码电脑 | 便民跑腿 | 其它
+  title           String          // 服务标题，如 "空调挂机/柜机免拆深度蒸汽清洗"
+  description     String          // 服务明细、作业流程与标准
+  coverImage      String?         // 封面展示图
+  images          String[]        @default([]) // 详情展示图
+  pricingType     String          @default("FIXED") // FIXED (固定全款) | STARTING (起步预约定金) | HOURLY (小时工) | QUOTE (到场报价)
+  priceCents      Int             // 基础价格/单价 (分，整数存储)
+  minPriceCents   Int?            // 最低预估价 (分)
+  maxPriceCents   Int?            // 最高预估价 (分)
+  unit            String          @default("次") // 次 | 台 | 小时 | 米 | 间
+  serviceDuration String?         // 预计耗时，如 "约1-2小时"
+  serviceAreas    String[]        @default([]) // 覆盖服务片区
+  bookingRequired Boolean         @default(true) // 是否需要预约时间
+  status          String          @default("ONLINE") // ONLINE 上架 | OFFLINE 下架
+  salesCount      Int             @default(0) // 累计销量/服务单数
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  orders          ServiceOrder[]
+
+  @@index([providerId, status])
+  @@index([category, status])
+  @@index([status, sortOrder])
+}
+
+// 本地服务交易订单
+model ServiceOrder {
+  id                  String          @id @default(cuid())
+  orderNo             String          @unique // e.g. SO20260913XXXXX
+  userId              String
+  user                User            @relation("CustomerServiceOrders", fields: [userId], references: [id], onDelete: Cascade)
+  providerId          String
+  provider            ServiceProvider @relation("ProviderServiceOrders", fields: [providerId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             ServiceProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productTitle        String          // 商品标题快照
+  productPrice        Int             // 购买时单价快照 (分)
+  pricingType         String          // 计价方式快照
+  quantity            Int             @default(1)
+
+  // 关联 P2 需求单 (若由需求撮合转化下单)
+  requestId           String?         @unique
+  request             ServiceRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  // 财务金额计算 (分，严禁使用浮点数 Float 存钱)
+  totalAmountCents    Int             // 订单原价 (分)
+  discountCents       Int             @default(0) // 优惠立减金额 (分)
+  payAmountCents      Int             // 实际支付金额 (分)
+  platformFeeCents    Int             @default(0) // 平台抽佣技术服务费 (分)
+  providerIncomeCents Int             @default(0) // 商家预估可结收入 (分)
+  commissionRate      Float           @default(0.10) // 该笔订单锁定的佣金率快照 (如 0.08 即 8%)
+
+  // 状态流转机
+  status              String          @default("PENDING_PAYMENT")
+  // PENDING_PAYMENT | PAID | ACCEPTED | IN_SERVICE | WAITING_CONFIRM | COMPLETED | CANCELLED | REFUNDING | REFUNDED | DISPUTED | CLOSED
+  paymentStatus       String          @default("UNPAID") // UNPAID | PAID | REFUNDED | PARTIAL_REFUNDED
+  refundStatus        String          @default("NONE") // NONE | APPLIED | PROCESSING | REFUNDED | REJECTED
+
+  // 服务履约与地址保护  // 技师指派履约 (P7)
+  technicianId        String?
+  technician          User?           @relation("TechnicianOrders", fields: [technicianId], references: [id], onDelete: SetNull)
+
+
+  addressId           String?
+  address             UserAddress?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  contactName         String          // 联系人姓名
+  contactPhone        String          // 客户电话
+  serviceArea         String          // 服务片区 (接单前公开展示给服务商)
+  addressDetail       String          // 详细门牌地址 (接单后服务商可见，接单前隐私保护)
+  appointmentAt       DateTime        // 预约上门服务时间
+  userRemark          String?         // 客户下单留言备注
+  providerNotes       String?         // 师傅内部跟进备注
+
+  // 完工交付物
+  completionNotes     String?         // 完工说明
+  completionImages    String[]        @default([]) // 完工实拍照片
+
+  // 全生命周期时间戳
+  paidAt              DateTime?
+  acceptedAt          DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?       // 师傅提交完工时间
+  confirmedAt         DateTime?       // 客户确认完工 (或自动确认) 时间
+  cancelledAt         DateTime?
+  cancelReason        String?
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // 渠道来源归因与复购追踪 (P4)
+  source              String          @default("DIRECT") // DIRECT | REPURCHASE | SEARCH | RECOMMENDED | FAVORITE | FOLLOW | COUPON | SHARE
+  reorderFromId       String?         // 再次购买的原订单ID引用
+  userCouponId        String?         // 关联核销的用户优惠券记录ID快照
+  usedCoupons         UserCoupon[]    @relation("OrderUsedCoupons")
+
+  // 关联模型
+  settlement          Settlement?
+  refunds             Refund[]
+  afterSales          AfterSale[]
+  review              Review?         @relation("OrderReview")
+
+  @@index([technicianId, status])
+  @@index([userId, status])
+  @@index([providerId, status])
+  @@index([status, createdAt])
+  @@index([paymentStatus])
+}
+
+// 平台抽佣与商户结算单
+model Settlement {
+  id               String          @id @default(cuid())
+  settlementNo     String          @unique // e.g. SET20260913XXXX
+  orderId          String          @unique
+  order            ServiceOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  providerId       String
+  provider         ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  grossAmountCents Int             // 订单交易总额 (分)
+  platformFeeCents Int             // 扣除平台技术服务费 (分)
+  netAmountCents   Int             // 师傅实际净到手结算金额 (分)
+  status           String          @default("PENDING") // PENDING (履约中冻结) | READY (完工待提现) | SETTLED (已出金到账) | HELD (纠纷冻结) | CANCELLED (退款作废)
+  settledAt        DateTime?
+  operatorId       String?         // 经办财务管理员 ID
+  operatorName     String?
+  payoutMethod     String?         // 结算方式: WECHAT_TRANSFER | BANK_TRANSFER | OFFLINE
+  payoutProof      String?         // 出金流水单号 / 汇款水单
+  remark           String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([providerId, status])
+  @@index([status, createdAt])
+}
+
+// 交易退款模型
+model Refund {
+  id              String          @id @default(cuid())
+  refundNo        String          @unique // e.g. RFD20260913XXXX
+  orderId         String
+  order           ServiceOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents     Int             // 退款金额 (分)
+  reason          String          // 退款原因
+  status          String          @default("REQUESTED") // REQUESTED | PROCESSING | SUCCESS | REJECTED | FAILED
+  wechatRefundId  String?         // 微信退款单号
+  wechatRefundFee Int?            // 微信退款实际到账分
+  rejectReason    String?         // 驳回原因
+  requestedAt     DateTime        @default(now())
+  processedAt     DateTime?
+  processedBy     String?         // 经办管理员 ID
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([orderId, status])
+  @@index([userId])
+}
+
+// 售后纠纷与争议仲裁模型
+model AfterSale {
+  id                String          @id @default(cuid())
+  orderId           String
+  order             ServiceOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  applicantId       String
+  applicant         User            @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  type              String          // 服务未完成 | 实际与描述不符 | 乱收费 | 质量差 | 态度恶劣 | 其它
+  description       String          // 详细争议说明
+  evidence          String[]        @default([]) // 实拍凭证照片
+  status            String          @default("OPEN") // OPEN | UNDER_REVIEW | WAITING_PROVIDER | WAITING_USER | RESOLVED | CLOSED
+  handledBy         String?         // 经办客服/仲裁员 ID
+  result            String?         // 仲裁结论说明
+  refundAmountCents Int?            // 仲裁退款金额 (分)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([orderId, status])
+  @@index([applicantId])
+}
+
+// ==========================================
+// P5: 平台统一认证记录模型
+// ==========================================
+model VerificationRecord {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifyType      String    // REAL_NAME | ENTERPRISE | MERCHANT | PROVIDER | LANDLORD
+  idCardName      String?   // 真实姓名 / 法人姓名
+  idCardNoMasked  String?   // 脱敏身份证号 (如 530124********1234)
+  idCardPhotos    String[]  @default([])
+  companyName     String?   // 企业/店铺注册名称
+  licenseNo       String?   // 统一社会信用代码 / 营业执照注册号
+  licensePhotos   String[]  @default([])
+  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  reviewerId      String?   // 审核管理员ID
+  reviewerNote    String?   // 审核备注 / 驳回理由
+  reviewedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId, verifyType])
+  @@index([status, createdAt])
+}
+
+// ==========================================
+// P5: 平台轻量分析与行为埋点模型
+// ==========================================
+model AnalyticsEvent {
+  id           String    @id @default(cuid())
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId    String?
+  eventName    String    // VIEW | SEARCH | FAVORITE | CONTACT | ORDER | PAY | SHARE | REDEEM
+  resourceType String?   // JOB | HOUSE | INDUSTRIAL | LISTING | SHOP | SERVICE_PRODUCT | POST | ARTICLE
+  resourceId   String?
+  channel      String?   // web_pc | web_mobile | wechat_h5
+  metadata     Json?     // 结构化元数据（脱敏无敏感信息）
+  createdAt    DateTime  @default(now())
+
+  @@index([eventName, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([userId, createdAt])
+}
+
+// ==========================================
+// P6: 智能化平台模型 (AI / 自动化 / 运营机会)
+// ==========================================
+
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  scene        String   // CHAT | SEARCH_QUERY | CONTENT_ASSIST | MODERATION_ASSIST | BUSINESS_INSIGHT | CUSTOMER_SERVICE | ANALYTICS
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costCents    Float    @default(0)
+  latencyMs    Int      @default(0)
+  status       String   // SUCCESS | FAILED | FALLBACK
+  errorMessage String?
+  resourceType String?  // JOB | HOUSE | LISTING | SHOP | INDUSTRIAL | SERVICE_PRODUCT
+  resourceId   String?
+  createdAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([scene, createdAt])
+  @@index([createdAt])
+}
+
+model AiConversation {
+  id            String      @id @default(cuid())
+  userId        String?
+  title         String      @default("新对话")
+  scene         String      @default("LIFESTYLE_ASSISTANT") // LIFESTYLE_ASSISTANT | CUSTOMER_SERVICE
+  status        String      @default("ACTIVE") // ACTIVE | ARCHIVED
+  lastMessageAt DateTime    @default(now())
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  messages      AiMessage[]
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lastMessageAt])
+  @@index([userId, createdAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  role           String         // user | assistant | system
+  content        String
+  resourcesJson  String?        // 匹配到的真实业务卡片 JSON
+  sourcesJson    String?        // 业务资源 JSON (统一规范)
+  intentJson     String?        // 解析出的意图结构体 JSON
+  metadataJson   String?        // 追问建议、状态元数据 JSON
+  createdAt      DateTime       @default(now())
+
+  conversation AiConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model AutomationRule {
+  id             String    @id @default(cuid())
+  name           String
+  triggerType    String    // FAVORITE_UNORDERED_3D | VIP_EXPIRE_7D | LISTING_EXPIRE_3D | NEW_DEMAND_MATCH | INACTIVE_USER_7D | INACTIVE_USER_30D
+  conditionsJson String    @default("{}")
+  actionType     String    // NOTIFICATION | TASK_REMINDER | COUPON_GRANT | OP_TAG | CUSTOMER_TASK
+  actionPayload  String    @default("{}")
+  enabled        Boolean   @default(true)
+  executionCount Int       @default(0)
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  logs AutomationLog[]
+}
+
+model AutomationLog {
+  id        String          @id @default(cuid())
+  ruleId    String
+  userId    String?
+  action    String
+  status    String          // SUCCESS | SKIPPED | FAILED
+  result    String?
+  createdAt DateTime        @default(now())
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model OperationOpportunity {
+  id          String   @id @default(cuid())
+  type        String   // SEARCH_GAP | SUPPLY_DEMAND_GAP | HIGH_PV_LOW_CONV | HIGH_FAV_NO_CONTACT | USER_CHURN
+  title       String
+  description String
+  dataJson    String   @default("{}")
+  priority    String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status      String   @default("PENDING") // PENDING | PROCESSED | IGNORED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([priority, createdAt])
+}
+
+model GrowthExperiment {
+  id             String   @id @default(cuid())
+  experimentKey  String   @unique
+  name           String
+  variantsJson   String   @default("[\"A\", \"B\"]")
+  weightsJson    String   @default("{\"A\": 50, \"B\": 50}")
+  status         String   @default("ACTIVE") // ACTIVE | PAUSED | CONCLUDED
+  metricsJson    String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+
+
+// =======================================================
+// P7: 多端统一数字生活平台模型 (WechatIdentity, Organization, ATS, Task, Queue, QR)
+// =======================================================
+
+model WechatIdentity {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appType       String    // OFFICIAL_ACCOUNT | MINI_PROGRAM
+  appId         String
+  openId        String
+  unionId       String?
+  subscribed    Boolean   @default(false)
+  subscribeTime DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([appType, openId])
+  @@index([userId])
+  @@index([unionId])
+  @@index([appType, appId])
+}
+
+model Organization {
+  id            String               @id @default(cuid())
+  name          String
+  type          String               @default("ENTERPRISE") // ENTERPRISE | MERCHANT
+  logo          String?
+  intro         String?
+  industry      String?
+  address       String?
+  contactName   String?
+  contactPhone  String?
+  ownerId       String
+  owner         User                 @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  providerId    String?              // 若为商户/服务商，绑定 ServiceProvider.id
+  provider      ServiceProvider?     @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  shopId        String?              // 若绑定 Shop.id
+  status        String               @default("ACTIVE") // ACTIVE | DISABLED | PENDING
+  riskFlag      Boolean              @default(false) // 风控标记
+  canExport     Boolean              @default(false) // 是否具备客户/订单全量导出权限
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  members       OrganizationMember[]
+  invites       OrganizationInvite[]
+  auditLogs     OrganizationAuditLog[]
+  tasks         OrganizationTask[]
+  jobs          Job[]
+  candidates    Candidate[]
+  company       Company?
+  qrCodes       UnifiedQrCode[]
+  apiKeys       ApiKeyConfig[]
+  webhooks      WebhookEndpoint[]
+
+  @@index([ownerId])
+  @@index([type, status])
+  @@index([providerId])
+}
+
+// ==========================================
+// 企业招聘主体档案 (Company)
+// ==========================================
+
+model Company {
+  id                   String        @id @default(cuid())
+  name                 String        @unique // 标准化企业全称
+  shortName            String?       // 企业简称
+  logo                 String?       // 企业Logo
+  coverImage           String?       // 企业展示封面/横幅
+  description          String?       // 企业深度图文/文本介绍
+  industry             String?       // 所属行业: 如 工业制造、食品加工、商贸零售
+  companySize          String?       @default("1-49人") // 1-49人 | 50-99人 | 100-499人 | 500-999人 | 1000人以上
+  companyType          String?       @default("民营企业") // 国企 | 外企 | 民营企业 | 股份制 | 事业单位 | 个体工商户
+  foundedYear          Int?          // 成立年份
+  registeredCapital    String?       // 注册资本: 如 500万元人民币
+  creditCode           String?       @unique // 统一社会信用代码 (18位)
+  businessLicenseImage String?       // 营业执照原件图片 (仅后台管理与合规审核可见)
+  legalRepresentative  String?       // 法定代表人 (仅后台/合规审核可见)
+  contactName          String?       // 官方招聘联系人
+  contactPhone         String?       // 官方联系电话 (脱敏后展示)
+  contactWechat        String?       // 官方招聘微信号
+  email                String?       // 企业电子邮箱
+  website              String?       // 企业官方网站
+  province             String?       @default("云南省")
+  city                 String?       @default("昆明市")
+  district             String?       @default("嵩明县")
+  address              String?       // 企业办公/注册/厂区地址
+  latitude             Float?        // 经度
+  longitude            Float?        // 纬度
+
+  // 认证与推荐流转状态
+  isVerified           Boolean       @default(false)
+  verificationStatus   String        @default("UNVERIFIED") // UNVERIFIED | PENDING | VERIFIED | REJECTED
+  verificationLevel    String?       // 基础收录 | 工商执照核验 | 园区实地认证
+  verifiedAt           DateTime?
+  rejectReason         String?       // 认证驳回原因
+  isFeaturedEmployer   Boolean       @default(false) // 名企招聘推荐 (与真实认证分离)
+
+  // 状态与溯源
+  status               String        @default("ACTIVE") // ACTIVE | DISABLED | ARCHIVED
+  source               String        @default("MIGRATED") // ADMIN_CREATED | USER_CREATED | IMPORT | CLAIMED | MIGRATED
+  createdBy            String?
+
+  // 关联工作台 Organization (1:1 体系协同)
+  organizationId       String?       @unique
+  organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  jobs                 Job[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([verificationStatus])
+  @@index([isFeaturedEmployer])
+  @@index([status])
+  @@index([industry])
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("OPERATOR") // OWNER | ADMIN | OPERATOR | HR | CUSTOMER_SERVICE | FINANCE | TECHNICIAN
+  title          String?      // 职位头衔，例如 "高级技师"、"招聘经理"、"财务主管"
+  status         String       @default("ACTIVE") // ACTIVE | DISABLED
+  joinedAt       DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId, role])
+}
+
+model OrganizationInvite {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviteCode     String       @unique // 随机邀请码
+  invitePhone    String?      // 指定邀请手机号 (可选)
+  role           String       @default("OPERATOR")
+  expiresAt      DateTime
+  isUsed         Boolean      @default(false)
+  usedByUserId   String?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([inviteCode])
+}
+
+model OrganizationAuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  operatorId     String
+  operatorName   String
+  action         String       // EXPORT_CUSTOMERS | EXPORT_ORDERS | UPDATE_MEMBER_ROLE | REMOVE_MEMBER | CHANGE_STATUS | ASSIGN_TECHNICIAN
+  targetType     String?
+  targetId       String?
+  detailsJson    String       @default("{}")
+  ip             String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([operatorId])
+}
+
+model Candidate {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId          String
+  job            Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resumeId       String
+  resume         Resume               @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stage          String               @default("APPLIED") // APPLIED | SCREENING | INTERVIEW | OFFER | HIRED | REJECTED
+  rating         Int                  @default(0) // 1-5 星评分
+  notes          String?              // HR/用人部门内部评语
+  rejectedReason String?
+  appliedAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  interviews     CandidateInterview[]
+
+  @@unique([jobId, resumeId])
+  @@index([organizationId, stage])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model CandidateInterview {
+  id            String    @id @default(cuid())
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  interviewTime DateTime
+  location      String    // 面试地点或线上会议链接
+  interviewer   String?   // 面试官姓名/称呼
+  status        String    @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED | MISSED
+  feedback      String?   // 面试评价反馈
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([candidateId])
+  @@index([interviewTime])
+}
+
+model LeadFollowUp {
+  id           String      @id @default(cuid())
+  leadId       String
+  lead         ServiceLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  operatorId   String
+  operatorName String
+  stage        String      // NEW | CONTACTED | FOLLOWING | WON | LOST
+  content      String      // 跟进内容、客户反馈、报价意向
+  nextFollowAt DateTime?   // 下次回访时间
+  createdAt    DateTime    @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model OrganizationTask {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assigneeId     String?
+  assignee       User?        @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  type           String       // LEAD_FOLLOW | AFTER_SALE | INTERVIEW | ORDER_SERVICE | CUSTOMER_CARE
+  resourceType   String?      // LEAD | SERVICE_ORDER | CANDIDATE | CUSTOMER
+  resourceId     String?
+  title          String
+  content        String?
+  status         String       @default("PENDING") // PENDING | PROCESSING | COMPLETED | CANCELLED
+  priority       String       @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  dueAt          DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, status])
+  @@index([assigneeId, status])
+}
+
+model AsyncJob {
+  id          String    @id @default(cuid())
+  queueName   String    @default("DEFAULT") // NOTIFICATION | WECHAT_MSG | WEBHOOK | AI_TASK | REPORT
+  handler     String    // 对应处理函数标识
+  payloadJson String    @default("{}")
+  status      String    @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
+  retryCount  Int       @default(0)
+  maxRetries  Int       @default(3)
+  errorMsg    String?
+  runAt       DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([queueName, status, runAt])
+}
+
+model UnifiedQrCode {
+  id               String        @id @default(cuid())
+  codeKey          String        @unique // 唯一编码标识
+  title            String        // 名称：如 "经开区招聘易拉宝"、"旗舰店立牌"
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  resourceType     String        // MERCHANT | ENTERPRISE | JOB | HOUSE | SERVICE | EVENT | SHOP
+  resourceId       String?
+  source           String        @default("POSTER") // POSTER | FLYER | WECHAT | STICKER | TABLE_CARD
+  campaign         String?       // 运营活动标识
+  scanCount        Int           @default(0)
+  lastScannedAt    DateTime?
+  targetUrl        String        // H5 跳转链接
+  miniProgramPath  String        // 小程序直达路径 (如 /pages/jobs/detail?id=xxx)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([resourceType, resourceId])
+  @@index([organizationId])
+  @@index([codeKey])
+}
+
+model ApiKeyConfig {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  keyPrefix      String       // yl_live_xxx
+  keyHash        String       // SHA-256 哈希
+  scopes         String[]     @default(["jobs:read", "orders:read"])
+  enabled        Boolean      @default(true)
+  lastUsedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([keyPrefix])
+}
+
+model WebhookEndpoint {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url            String
+  secret         String       // Webhook HMAC 签名密钥
+  events         String[]     @default(["order.completed", "lead.created", "candidate.applied"])
+  enabled        Boolean      @default(true)
+  failureCount   Int          @default(0)
+  lastDeliveredAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  deliveries     WebhookDelivery[]
+
+  @@index([organizationId])
+}
+
+model WebhookDelivery {
+  id          String          @id @default(cuid())
+  endpointId  String
+  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event       String
+  payloadJson String
+  status      String          // SUCCESS | FAILED
+  statusCode  Int?
+  response    String?
+  durationMs  Int             @default(0)
+  createdAt   DateTime        @default(now())
+
+  @@index([endpointId, createdAt])
+}
+
+// ==========================================
+// P8: 业务事件总线 (Business Event Bus - Append-Only)
+// ==========================================
+model BusinessEvent {
+  id             String    @id @default(cuid())
+  eventType      String    // USER_REGISTERED, JOB_PUBLISHED, SERVICE_ORDER_CREATED, PAYMENT_SUCCEEDED, LEAD_CREATED, etc.
+  userId         String?
+  organizationId String?
+  resourceType   String?   // JOB | HOUSE | INDUSTRIAL | INFO | COMMUNITY | SERVICE_PRODUCT | SERVICE_PROVIDER | MERCHANT
+  resourceId     String?
+  payloadJson    String    @default("{}")
+  source         String    @default("SYSTEM") // WEB | MINI_PROGRAM | WORKSPACE | OPEN_API | SYSTEM | AGENT
+  status         String    @default("PENDING") // PENDING | PROCESSED | FAILED | DEAD_LETTER
+  retryCount     Int       @default(0)
+  error          String?
+  occurredAt     DateTime  @default(now())
+  processedAt    DateTime?
+
+  @@index([eventType])
+  @@index([organizationId])
+  @@index([status])
+  @@index([occurredAt])
+}
+
+// ==========================================
+// P8: AI Agent 执行记录与安全审计 (AgentActionLog)
+// ==========================================
+model AgentActionLog {
+  id                  String    @id @default(cuid())
+  agentId             String    // MERCHANT_AGENT | ENTERPRISE_AGENT | OPERATIONS_AGENT | RISK_AGENT
+  userId              String
+  organizationId      String?
+  tool                String    // create_task, create_followup, etc.
+  inputJson           String    @default("{}")
+  resultJson          String    @default("{}")
+  riskLevel           String    @default("LOW_RISK") // LOW_RISK | MEDIUM_RISK | HIGH_RISK
+  approvalStatus      String    @default("AUTO_APPROVED") // AUTO_APPROVED | PENDING | APPROVED | REJECTED
+  approvalRequestId   String?
+  rollbackStatus      String    @default("NONE") // NONE | CAN_ROLLBACK | ROLLED_BACK | FAILED
+  rollbackPayloadJson String?
+  executedAt          DateTime  @default(now())
+
+  @@index([agentId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([executedAt])
+}
+
+// ==========================================
+// P8: 敏感动作与中风险单级人工审批 (ApprovalRequest)
+// ==========================================
+model ApprovalRequest {
+  id             String    @id @default(cuid())
+  organizationId String?
+  requesterId    String
+  approverId     String?
+  actionType     String    // BULK_MARKETING | EXPORT_DATA | BATCH_STATUS_UPDATE | AGENT_MEDIUM_ACTION
+  title          String
+  description    String?
+  payloadJson    String    @default("{}")
+  status         String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  riskLevel      String    @default("MEDIUM_RISK")
+  reviewedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([requesterId])
+}
+
+// ==========================================
+// P8: 统一自动化工作流引擎 (WorkflowRule & WorkflowExecution)
+// ==========================================
+model WorkflowRule {
+  id                String              @id @default(cuid())
+  organizationId    String?             // 属于具体租户或平台全局
+  name              String
+  description       String?
+  triggerType       String              @default("EVENT") // EVENT | SCHEDULE | MANUAL | CONDITION
+  triggerEvent      String?             // e.g. "order.completed", "lead.created"
+  cronExpr          String?
+  conditionJson     String              @default("{}")
+  actionType        String              // SEND_NOTIFICATION | CREATE_TASK | ADD_TAG | CREATE_DRAFT | ASSIGN_OPERATOR | GENERATE_REPORT | ISSUE_COUPON | UPDATE_LOW_RISK_STATUS
+  actionPayloadJson String              @default("{}")
+  enabled           Boolean             @default(true)
+  depthLimit        Int                 @default(3)
+  executionCount    Int                 @default(0)
+  successCount      Int                 @default(0)
+  failureCount      Int                 @default(0)
+  lastExecutedAt    DateTime?
+  createdById       String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  executions        WorkflowExecution[]
+
+  @@index([organizationId])
+  @@index([triggerType])
+  @@index([enabled])
+}
+
+model WorkflowExecution {
+  id             String       @id @default(cuid())
+  ruleId         String
+  rule           WorkflowRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  triggerEventId String?
+  organizationId String?
+  status         String       @default("SUCCESS") // SUCCESS | FAILED | SKIPPED
+  depth          Int          @default(1)
+  inputJson      String       @default("{}")
+  outputJson     String       @default("{}")
+  error          String?
+  durationMs     Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  @@index([ruleId, createdAt])
+  @@index([organizationId])
+}
+
+// ==========================================
+// P8: 平台数据中台统一指标注册表 (MetricRegistry & MetricValue)
+// ==========================================
+model MetricDefinition {
+  id          String   @id @default(cuid())
+  code        String   @unique // DAU, MAU, NEW_USERS, ORDERS, GMV, REFUND_RATE, LEAD_CONVERSION, REPEAT_RATE
+  name        String
+  category    String   @default("CORE") // CORE | REVENUE | TRAFFIC | SERVICE
+  unit        String   @default("COUNT") // COUNT | CENTS | PERCENT | MS
+  formula     String
+  sourceTable String
+  updatedAt   DateTime @updatedAt
+}
+
+model MetricValue {
+  id             String   @id @default(cuid())
+  metricCode     String
+  region         String   @default("ALL") // ALL | YANG_LIN_ZHEN | UNIVERSITY_TOWN | JING_KAI_QU | SONG_MING
+  industry       String   @default("ALL") // ALL | MANUFACTURING | FOOD | LOGISTICS | SERVICES | RETAIL
+  dateStr        String   // YYYY-MM-DD
+  valueNum       Float    @default(0)
+  dimensionsJson String   @default("{}")
+  createdAt      DateTime @default(now())
+
+  @@unique([metricCode, region, industry, dateStr])
+  @@index([metricCode, dateStr])
+}
+
+// ==========================================
+// P8: 知识库 (KnowledgeBase - 平台规则与企业私有知识)
+// ==========================================
+model KnowledgeArticle {
+  id             String   @id @default(cuid())
+  organizationId String?  // null = 平台公共知识, 存在值 = 企业租户私有知识库
+  title          String
+  category       String   @default("GENERAL") // RULE | GUIDE | POLICY | FAQ | PRIVATE
+  content        String
+  source         String?  // 出处链接或文档来源
+  owner          String?  // 归属部门或负责人
+  status         String   @default("VERIFIED") // VERIFIED | DRAFT | REJECTED
+  viewCount      Int      @default(0)
+  helpfulCount   Int      @default(0)
+  unhelpfulCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([status])
+}
+
+
+// ==========================================
+// P8: AI Agent 人工评估反馈 (AgentEvaluation)
+// ==========================================
+model AgentEvaluation {
+  id          String   @id @default(cuid())
+  actionLogId String
+  userId      String
+  rating      String   // UP | DOWN
+  feedback    String?
+  createdAt   DateTime @default(now())
+
+  @@index([actionLogId])
+  @@index([userId])
+}
+
+
+
+// ==========================================
+// 自营便利店 (杨林生活网自营零售 P0)
+// ==========================================
+
+model MallCategory {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  icon           String?
+  sortOrder      Int       @default(0)
+  restrictedSale Boolean   @default(false)
+  status         String    @default("ACTIVE") // ACTIVE | DISABLED
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  products       Product[]
+
+  @@index([status, sortOrder])
+}
+
+model Product {
+  id                 String          @id @default(cuid())
+  name               String
+  subtitle           String?
+  categoryId         String
+  category           MallCategory    @relation(fields: [categoryId], references: [id])
+  brand              String?
+  barcode            String?
+  coverImage         String?
+  images             String[]        @default([])
+  unit               String          @default("件")
+  priceCents         Int
+  originalPriceCents Int?
+  costCents          Int?
+  stock              Int             @default(0)
+  lowStockThreshold  Int             @default(5)
+  salesCount         Int             @default(0)
+  status             String          @default("ON_SALE") // DRAFT | ON_SALE | OFF_SALE | SOLD_OUT
+  isFeatured         Boolean         @default(false)
+  isHot              Boolean         @default(false)
+  isNew              Boolean         @default(false)
+  isSelfOperated     Boolean         @default(true)
+  description        String?
+  specification      String?
+  restrictedSale     Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  orderItems         MallOrderItem[]
+
+  @@index([categoryId, status])
+  @@index([status, isFeatured, isHot, isNew])
+}
+
+model DeliveryZone {
+  id                         String    @id @default(cuid())
+  name                       String    @unique
+  feeCents                   Int       @default(300)
+  freeShippingThresholdCents Int       @default(2900)
+  estimatedMinutes           String?   @default("30-45分钟")
+  enabled                    Boolean   @default(true)
+  sortOrder                  Int       @default(0)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+}
+
+model Courier {
+  id             String      @id @default(cuid())
+  userId         String?
+  name           String
+  phone          String      @unique
+  accessCode     String      @default("888888")
+  status         String      @default("ACTIVE") // ACTIVE | INACTIVE
+  remark         String?
+  totalDelivered Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  orders         MallOrder[]
+}
+
+model MallOrder {
+  id                   String          @id @default(cuid())
+  orderNo              String          @unique
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveryMethod       String          // DELIVERY | PICKUP
+  status               String          @default("WAITING_PAYMENT")
+  
+  // 自提专属
+  pickupCode           String?
+  pickedUpAt           DateTime?
+  
+  // 配送执行信息
+  deliveryType         String?         // OWNER | COURIER | THIRD_PARTY
+  assignedCourierId    String?
+  courier              Courier?        @relation(fields: [assignedCourierId], references: [id], onDelete: SetNull)
+  thirdPartyPlatform   String?
+  thirdPartyRiderName  String?
+  thirdPartyRiderPhone String?
+  thirdPartyFeeCents   Int?
+  thirdPartyNotes      String?
+  
+  // 收件人/自提人信息
+  contactName          String
+  contactPhone         String
+  deliveryZoneId       String?
+  deliveryZoneName     String?
+  addressDetail        String?
+  expectedDeliveryTime String?
+  userRemark           String?
+  
+  // 财务金额 (分)
+  goodsTotalCents      Int
+  deliveryFeeCents     Int             @default(0)
+  discountCents        Int             @default(0)
+  payAmountCents       Int
+  paymentMethod        String          @default("WECHAT")
+  paidAt               DateTime?
+  transactionId        String?
+  
+  // 节点时间戳
+  pickingAt            DateTime?
+  readyAt              DateTime?
+  deliveringAt         DateTime?
+  deliveredAt          DateTime?
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  
+  items                MallOrderItem[]
+  logs                 MallOrderLog[]
+  afterSale            MallAfterSale?
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@index([assignedCourierId, status])
+  @@index([pickupCode])
+}
+
+model MallOrderItem {
+  id            String    @id @default(cuid())
+  orderId       String
+  order         MallOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName   String
+  productCover  String?
+  specification String?
+  unit          String    @default("件")
+  priceCents    Int
+  quantity      Int
+  totalCents    Int
+  createdAt     DateTime  @default(now())
+
+  @@index([orderId])
+}
+
+model MallOrderLog {
+  id           String    @id @default(cuid())
+  orderId      String
+  order        MallOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  operator     String    // USER | ADMIN | COURIER | SYSTEM
+  operatorName String?
+  action       String
+  notes        String?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model MallAfterSale {
+  id                String    @id @default(cuid())
+  afterSaleNo       String    @unique
+  orderId           String    @unique
+  order             MallOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId            String
+  reason            String
+  description       String
+  images            String[]  @default([])
+  refundAmountCents Int
+  status            String    @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED | CLOSED
+  adminNotes        String?
+  revertStock       Boolean   @default(false)
+  wechatRefundId    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([orderId, status])
+}
