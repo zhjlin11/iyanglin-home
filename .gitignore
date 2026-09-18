@@ -73,6 +73,17 @@ ecosystem.config.js
 ecosystem.config.js.bak
 .next-*
 
+# 用户上传静态资源 (由独立备份包/对象存储管理，严禁提交到Git)
+public/uploads/
+public/UploadFile/
+
+# 临时工作目录与垃圾临时文件
+scratch/
+0
+i.photos
+patch_files.txt
+prisma.$*
+
 # 操作系统与编辑器生成文件
 .DS_Store
 Thumbs.db
@@ -80,3 +91,4 @@ Thumbs.db
 .vscode/
 *.sublime-project
 *.sublime-workspace
+

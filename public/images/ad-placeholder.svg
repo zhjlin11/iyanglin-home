@@ -1,0 +1,14 @@
+<svg width="1200" height="300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0.5">
+      <stop offset="0%" stop-color="#0B2240"/>
+      <stop offset="60%" stop-color="#1967D2"/>
+      <stop offset="100%" stop-color="#2B7DE9"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <text x="600" y="120" text-anchor="middle" font-size="42" font-weight="900" fill="white" font-family="sans-serif">杨林生活网 · 黄金广告位</text>
+  <text x="600" y="175" text-anchor="middle" font-size="22" fill="rgba(255,255,255,0.8)" font-family="sans-serif">面向全镇数万活跃用户 · 精准推广您的品牌</text>
+  <rect x="480" y="210" width="240" height="48" rx="24" fill="#FD7E14"/>
+  <text x="600" y="242" text-anchor="middle" font-size="18" font-weight="700" fill="white" font-family="sans-serif">联系投放广告</text>
+</svg>

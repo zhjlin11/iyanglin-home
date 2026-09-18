@@ -1,0 +1,68 @@
+{
+  "batchId": "DRY_RUN_1785080590909",
+  "timestamp": "2026/7/26 23:43:10",
+  "isDryRunMode": true,
+  "databaseWritten": false,
+  "dbCountBefore": {
+    "User": 2,
+    "Listing": 13,
+    "Job": 3,
+    "House": 1,
+    "Shop": 2,
+    "Event": 2,
+    "EventSignup": 0,
+    "Article": 0,
+    "DatingProfile": 0,
+    "Post": 0,
+    "PostComment": 0,
+    "BillingOrder": 1
+  },
+  "dbCountAfter": {
+    "User": 2,
+    "Listing": 13,
+    "Job": 3,
+    "House": 1,
+    "Shop": 2,
+    "Event": 2,
+    "EventSignup": 0,
+    "Article": 0,
+    "DatingProfile": 0,
+    "Post": 0,
+    "PostComment": 0,
+    "BillingOrder": 1
+  },
+  "totalAssetsScanned": 147,
+  "moduleStats": [
+    {
+      "moduleName": "Category (分类字典)",
+      "sourceFile": "cats9.json",
+      "rawCount": 1,
+      "parsedSuccessCount": 1,
+      "duplicateCount": 0,
+      "validMigratableCount": 1,
+      "missingRequiredFieldsCount": 0,
+      "evidenceType": "[JSON解析确认]"
+    },
+    {
+      "moduleName": "Job (招聘岗位图谱)",
+      "sourceFile": "publish_jobs_0723.py",
+      "rawCount": 569,
+      "parsedSuccessCount": 569,
+      "duplicateCount": 0,
+      "validMigratableCount": 569,
+      "missingRequiredFieldsCount": 0,
+      "evidenceType": "[代码静态检查确认]"
+    },
+    {
+      "moduleName": "SQL Rollback (修复脚本)",
+      "sourceFile": "_rollback_0723.sql",
+      "rawCount": 6,
+      "parsedSuccessCount": 6,
+      "duplicateCount": 0,
+      "validMigratableCount": 0,
+      "missingRequiredFieldsCount": 0,
+      "evidenceType": "[SQL解析确认]"
+    }
+  ],
+  "warnings": []
+}

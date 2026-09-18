@@ -1,0 +1,9 @@
+{
+  "batchId": "job-prod-main",
+  "timestamp": "2026/7/30 00:19:47",
+  "dbBefore": 58,
+  "dbAfter": 58,
+  "insertedCount": 0,
+  "skippedCount": 50,
+  "insertedOldIds": []
+}

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580" width="500" height="580">
+  <defs>
+    <!-- Blue gradient for Y letter -->
+    <linearGradient id="yBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="50%" stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#42A5F5"/>
+    </linearGradient>
+    <!-- Green gradient for L letter -->
+    <linearGradient id="lGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2E7D32"/>
+      <stop offset="50%" stop-color="#43A047"/>
+      <stop offset="100%" stop-color="#66BB6A"/>
+    </linearGradient>
+    <!-- Circle arc gradient -->
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#1E88E5"/>
+    </linearGradient>
+    <!-- Swoosh gradient -->
+    <linearGradient id="swooshGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="60%" stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+    <!-- Bottom arc gradient -->
+    <linearGradient id="bottomArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#43A047"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!--  ICON MARK  (centered at 250, 230 r=185)  -->
+  <!-- ══════════════════════════════════════════ -->
+
+  <!-- Top arc ring (open circle top) -->
+  <path d="M 80 200 A 170 170 0 1 1 420 200"
+        stroke="url(#arcGrad)" stroke-width="22" fill="none"
+        stroke-linecap="round"/>
+
+  <!-- Speed swoosh lines (lower left, 3 parallel arcs) -->
+  <path d="M 68 295 Q 120 370 240 390" stroke="url(#swooshGrad)" stroke-width="8"  fill="none" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 72 318 Q 126 392 246 408" stroke="url(#swooshGrad)" stroke-width="6"  fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 78 340 Q 132 410 252 424" stroke="url(#swooshGrad)" stroke-width="4"  fill="none" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Bottom swoosh arc (green, lower right) -->
+  <path d="M 196 410 Q 310 448 418 340"
+        stroke="url(#bottomArc)" stroke-width="18" fill="none"
+        stroke-linecap="round"/>
+
+  <!-- ── Y letter ── -->
+  <!-- Left arm of Y -->
+  <path d="M 120 90 L 240 265 L 240 380 L 205 380 L 205 278 L 100 118 Z"
+        fill="url(#yBlue)"/>
+  <!-- Right arm of Y -->
+  <path d="M 360 90 L 240 265 L 275 265 L 375 118 Z"
+        fill="url(#yBlue)"/>
+
+  <!-- ── L letter (green) ── -->
+  <!-- Vertical stroke of L -->
+  <path d="M 275 165 L 310 165 L 310 360 L 420 360 L 420 390 L 275 390 Z"
+        fill="url(#lGreen)"/>
+
+  <!-- Pixel dots (upper right accent, 3 squares) -->
+  <rect x="385" y="118" width="16" height="16" rx="3" fill="#66BB6A" opacity="0.9"/>
+  <rect x="406" y="98"  width="13" height="13" rx="2.5" fill="#66BB6A" opacity="0.7"/>
+  <rect x="403" y="116" width="9"  height="9"  rx="2"   fill="#43A047" opacity="0.5"/>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!--  TYPOGRAPHY                               -->
+  <!-- ══════════════════════════════════════════ -->
+
+  <!-- 杨林生活网 · Chinese Name -->
+  <text x="250" y="488"
+        font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif"
+        font-weight="900"
+        font-size="68"
+        fill="#1A1A2E"
+        text-anchor="middle"
+        letter-spacing="4">杨林生活网</text>
+
+  <!-- Decorative dashes + YANG LIN LIFE -->
+  <line x1="50"  y1="510" x2="120" y2="510" stroke="#555" stroke-width="1.5"/>
+  <text x="250" y="516"
+        font-family="'Inter','Arial',sans-serif"
+        font-weight="600"
+        font-size="19"
+        fill="#444"
+        text-anchor="middle"
+        letter-spacing="3">YANG LIN LIFE</text>
+  <line x1="380" y1="510" x2="450" y2="510" stroke="#555" stroke-width="1.5"/>
+
+  <!-- Domain -->
+  <text x="250" y="548"
+        font-family="'Inter','Arial',sans-serif"
+        font-weight="700"
+        font-size="19"
+        fill="#1565C0"
+        text-anchor="middle"
+        letter-spacing="1">iyanglin.com</text>
+</svg>
