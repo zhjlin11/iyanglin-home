@@ -37,6 +37,8 @@ dev-*.log
 
 # 备份、打包与归档文件
 backups/
+release*/
+archive*/
 *.tar.gz
 *.tar
 *.zip
