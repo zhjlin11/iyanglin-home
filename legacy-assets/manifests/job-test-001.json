@@ -1,0 +1,129 @@
+{
+  "batchId": "job-test-001",
+  "timestamp": "2026/7/26 23:49:55",
+  "targetDatabase": "ISOLATED_TEST_PAYLOAD",
+  "approvedForTestImport": true,
+  "totalSelectedCount": 10,
+  "items": [
+    {
+      "oldId": "LEGACY_JOB_0723_1",
+      "title": "驾驶员（男，C1）",
+      "company": "物流公司（杨林）",
+      "body": "要求有C1驾驶证，工资面议。\n工作地点：杨林恒宸工业区\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_2",
+      "title": "上楼员（校内配送）",
+      "company": "杨林大学城校园外卖",
+      "body": "楼下接餐送到宿舍门口，不用出楼栋，月休两天，每月保底4000单，0.9元/单，月入5500-8000元。\n上手简单，新人带教，时间10:00-21:00。\n\n【联系电话】：暂无电话",
+      "salary": "5500-8000元/月",
+      "area": "杨林大学城",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_3",
+      "title": "校园骑手",
+      "company": "杨林大学城校园外卖",
+      "body": "食堂取餐送宿舍楼下，不用爬楼，免费提供电动车（不收押金/租金），综合月薪6000-7000元。\n工作时间10:00-21:00，兼职时间灵活，校内配送安全，单量稳定。\n\n【联系电话】：暂无电话",
+      "salary": "6000-7000元/月",
+      "area": "杨林大学城",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_4",
+      "title": "缝纫工（10名）",
+      "company": "美迎家具椅子厂",
+      "body": "工资计件，也可以带回家做，厂里提供机器。\n工作地址：昆明杨林美迎家具创业园十一幢\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_5",
+      "title": "打包师傅（2名，夫妻工优先）",
+      "company": "定制家具厂（杨林）",
+      "body": "擦板带打包，最好夫妻工，保底10000+计件。\n要求吃苦耐劳，听从安排，不会勿扰。\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_6",
+      "title": "普工（2名）",
+      "company": "海绵厂（杨林）",
+      "body": "年龄30-40岁左右，要求在杨林四营周边优先，工资3000-4000元，加班另算。\n\n【联系电话】：暂无电话",
+      "salary": "3000-4000元/月",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_7",
+      "title": "全职会计（1名）",
+      "company": "昆明昆城星餐饮管理有限公司",
+      "body": "薪资3500-6000元，工作时间8:00-18:00，单休。\n岗位职责：日常财务核算与账务处理；按时完成税务申报；编制财务报表（资产负债表/利润表等）；配合成本费用核算与资金管理；参与月末、年末结账。\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_8",
+      "title": "华为手机导购员",
+      "company": "华为手机营销（杨林大学城）",
+      "body": "薪资福利：竞争力薪酬+五险一金+赋能培训。\n岗位职责：承接并完成所在门店的销售目标，了解消费者需求，引导场景化互动体验，做好门店陈列与品牌形象维护，完成日常学习及新品培训。\n要求：高中及以上学历，有手机/电视/电脑等3C行业经验优先，主动担责，执行力强。\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林大学城",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_9",
+      "title": "普工（5名，夫妻工优先）",
+      "company": "路灯厂（杨林太平龙村）",
+      "body": "保底3500-4000元。免费提供食宿，免费购买人身意外保险，要求长期稳定工作。\n\n【联系电话】：暂无电话",
+      "salary": "3500-4000元/月",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    },
+    {
+      "oldId": "LEGACY_JOB_0723_10",
+      "title": "激光切割学徒（2名）",
+      "company": "路灯厂（杨林太平龙村）",
+      "body": "保底4000-5000元，对激光切割技术感兴趣，学习能力强。免费提供食宿，免费购买人身意外保险。\n\n【联系电话】：暂无电话",
+      "salary": "面议",
+      "area": "杨林工业园区",
+      "jobType": "fulltime",
+      "status": "APPROVED",
+      "maskedPhone": "暂无电话",
+      "rawPhone": ""
+    }
+  ]
+}

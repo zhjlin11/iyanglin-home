@@ -1,0 +1,73 @@
+# ==============================================================================
+# 杨林生活网 (iyanglin.com) - Docker Compose 容器编排
+# 启动指令: docker compose up -d
+# 查看状态: docker compose ps
+# 查看日志: docker compose logs -f app
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # 数据库服务: PostgreSQL 15
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: yanglin-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-vasto_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vasto_secure_password_2026}
+      POSTGRES_DB: ${DB_NAME:-yanglin_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vasto_admin} -d ${DB_NAME:-yanglin_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yanglin-net
+
+  # ----------------------------------------------------------------------------
+  # 主站应用: Next.js 全栈服务
+  # ----------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yanglin-app
+    restart: always
+    ports:
+      - "3006:3006"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-vasto_admin}:${DB_PASSWORD:-vasto_secure_password_2026}@postgres:5432/${DB_NAME:-yanglin_db}?schema=public
+      - PORT=3006
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # 持久化用户上传文件
+      - uploads_data:/app/public/UploadFile
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3006/api/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - yanglin-net
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  yanglin-net:
+    driver: bridge

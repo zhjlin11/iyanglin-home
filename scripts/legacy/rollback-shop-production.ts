@@ -1,0 +1,42 @@
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL || "postgresql://vasto_admin:vasto_password_2026@127.0.0.1:5432/yanglin_db?schema=public",
+    },
+  },
+});
+
+export async function rollbackShopProduction(batchOldIds: string[]) {
+  console.log("⏪ 正在执行 生产环境 Shop 批次数据事务回滚...\n");
+
+  const initialCount = await prisma.shop.count();
+  console.log(`- 回滚前生产 Shop 记录总数: ${initialCount}`);
+
+  const deleteResult = await prisma.shop.deleteMany({
+    where: {
+      oldId: {
+        in: batchOldIds,
+      },
+    },
+  });
+
+  const finalCount = await prisma.shop.count();
+  console.log(`- 成功清理的回滚记录数: ${deleteResult.count}`);
+  console.log(`- 回滚后生产 Shop 记录总数: ${finalCount}`);
+  console.log("--------------------------------------------------\n");
+
+  await prisma.$disconnect();
+  return { deletedCount: deleteResult.count, finalCount };
+}
+
+if (require.main === module) {
+  const sampleBatch = [
+    "LEGACY_SHOP_0723_001",
+    "LEGACY_SHOP_0723_002",
+    "LEGACY_SHOP_0723_003",
+    "LEGACY_SHOP_0723_004",
+  ];
+  rollbackShopProduction(sampleBatch).catch(console.error);
+}

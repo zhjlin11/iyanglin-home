@@ -1,0 +1,12 @@
+{
+  "miniprogramRoot": "./",
+  "projectname": "iyanglin-miniprogram",
+  "description": "杨林生活网官方微信小程序客户端工程",
+  "appid": "wx_mini_mock",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  }
+}
