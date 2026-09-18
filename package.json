@@ -1,0 +1,43 @@
+{
+  "name": "yanglinol-newsite",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "legacy:scan": "npx tsx scripts/legacy/scan-assets.ts",
+    "legacy:dry-run": "npx tsx scripts/legacy/dry-run.ts",
+    "legacy:inspect-jobs": "npx tsx scripts/legacy/inspect-jobs.ts",
+    "legacy:import-jobs-test": "npx tsx scripts/legacy/import-jobs-test.ts",
+    "legacy:rollback-jobs-test": "npx tsx scripts/legacy/rollback-jobs-test.ts",
+    "legacy:generate-prod-plan": "npx tsx scripts/legacy/generate-prod-plan.ts",
+    "legacy:import-jobs-production": "npx tsx scripts/legacy/import-jobs-production.ts",
+    "legacy:rollback-jobs-production": "npx tsx scripts/legacy/rollback-jobs-production.ts",
+    "legacy:verify-jobs-production": "npx tsx scripts/legacy/verify-jobs-production.ts",
+    "legacy:backup-prod-db": "npx tsx scripts/legacy/backup-prod-db.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.0",
+    "lucide-react": "^1.45.0",
+    "next": "^15.5.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-quill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "^6.16.0",
+    "typescript": "^5.8.0"
+  }
+}

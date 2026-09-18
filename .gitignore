@@ -1,0 +1,74 @@
+# ==============================================================================
+# 杨林生活网 (iyanglin.com) - Git 忽略规则
+# ==============================================================================
+
+# 依赖与编译构建产物
+node_modules/
+.next/
+out/
+build/
+dist/
+dist-server/
+*.tsbuildinfo
+
+# 环境变量与机密配置 (严禁提交)
+.env
+.env.*
+!.env.example
+
+# 证书与私钥
+cert/*.pem
+cert/*.key
+cert/*.p12
+cert/*.crt
+*.pem
+*.key
+*.p12
+*.crt
+
+# 日志与临时调试数据
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dev-*.log
+
+# 备份、打包与归档文件
+backups/
+*.tar.gz
+*.tar
+*.zip
+*.dump
+*.bak
+*.swp
+
+# 临时研究脚本与演练产物
+scratch/
+scratch_*
+temp_*
+tmp/
+cache/
+*.photos
+prisma.$*
+patch_files.txt
+0
+
+# 用户上传媒体文件 (按资产独立灾备归档，不进入 Git 源码仓库)
+public/UploadFile/
+public/uploads/
+
+# 历史遗留资产临时目录
+legacy-assets/input/
+legacy-assets/work/
+legacy-assets/reports/
+legacy-assets/errors/
+
+# 操作系统与编辑器生成文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
