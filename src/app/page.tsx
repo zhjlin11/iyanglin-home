@@ -239,8 +239,8 @@ export default async function HomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Navbar />
 
-      {/* ═══════════════ 首页顶部 Banner 广告位 ═══════════════ */}
-      <AdBanner placementKey="HOME_BANNER" maxItems={2} />
+      {/* ═══════════════ 首页顶部 Banner 广告位 (按需关闭) ═══════════════ */}
+      {/* <AdBanner placementKey="HOME_BANNER" maxItems={2} /> */}
 
       {/* ═══════════════ 移动端 APP 风格首页 ═══════════════ */}
       <div className={s.mobileSection}>
