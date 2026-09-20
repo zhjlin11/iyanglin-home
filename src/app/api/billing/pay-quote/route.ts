@@ -138,7 +138,7 @@ export async function POST(request: Request) {
   }
 
   // 4. 模拟/测试支付通道 — 生产环境严格禁用，杜绝资金绕过
-  if (payMethod === "MOCK_PAY") {
+  if (payMethod === "MOCK_PAY" || payMethod === "MOCK") {
     return NextResponse.json(
       { error: "安全审计拦截：系统已永久禁用模拟支付通道，请使用微信真实支付、金币或积分支付" },
       { status: 403 }
