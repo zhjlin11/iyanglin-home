@@ -33,7 +33,10 @@ export async function GET(request: Request) {
   });
 }
 
-/** POST /api/wallet/coins — 购买/充值金币套餐或金币直接扣费 */
+import { prisma } from "@/lib/prisma";
+import { unifiedOrder, getPayConfig, signMD5, nonceStr } from "@/lib/wechat-pay";
+
+/** POST /api/wallet/coins — 购买/充值金币套餐预下单（多场景微信支付）或金币直接扣费 */
 export async function POST(request: Request) {
   const session = await getSession(request);
   if (!session) {
@@ -45,24 +48,169 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求无效" }, { status: 400 });
   }
 
-  // 1. 充值金币 (兼容显式 action="recharge" 或直接传入 packageId)
+  // 1. 充值金币下单（根据客户端场景适配 JSAPI / H5 / NATIVE，禁止任何无抵押直接增加金币）
   if (body.action === "recharge" || (!body.action && body.packageId)) {
     const pkg = COIN_RECHARGE_PACKAGES.find((p) => p.id === body.packageId);
     if (!pkg) {
       return NextResponse.json({ error: "充值套餐不存在" }, { status: 400 });
     }
 
-    const orderNo = `COIN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const orderNo = `COIN${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
     const totalCoins = pkg.coins + pkg.bonusCoins;
+    const paymentScene: "JSAPI" | "H5" | "NATIVE" = body.paymentScene || "NATIVE";
 
-    const updated = await rechargeCoins(session.id, totalCoins, orderNo, `微信充值: ${pkg.name}`);
-
-    return NextResponse.json({
-      success: true,
-      ok: true,
-      message: `成功充值 ${totalCoins} 金币！`,
-      balance: updated.balance,
+    // 创建待付款订单（防篡改凭证）
+    const order = await prisma.billingOrder.create({
+      data: {
+        orderNo,
+        planName: `金币充值-${pkg.name}`,
+        targetKind: "coin",
+        targetId: session.id, // targetId 记录充值主体 userId
+        targetTitle: `充值${totalCoins}金币 (${pkg.name})`,
+        amountCents: pkg.priceCents,
+        assetType: "RMB",
+        amountRmbCents: pkg.priceCents,
+        paymentChannel: "WECHAT",
+        status: "PENDING_PAYMENT",
+        userId: session.id,
+      },
     });
+
+    try {
+      const config = getPayConfig();
+      const forwarded = request.headers.get("x-forwarded-for");
+      const clientIp = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+
+      // 微信内网页 -> JSAPI 支付
+      if (paymentScene === "JSAPI") {
+        let openId: string | null = null;
+        const wechatAccount = await prisma.wechatAccount.findFirst({
+          where: { userId: session.id, appId: config.appId },
+          select: { openId: true },
+        });
+        if (wechatAccount?.openId) {
+          openId = wechatAccount.openId;
+        } else {
+          const userObj = await prisma.user.findUnique({
+            where: { id: session.id },
+            select: { wechatOpenId: true },
+          });
+          if (userObj?.wechatOpenId) openId = userObj.wechatOpenId;
+        }
+
+        if (!openId) {
+          const redirectUri = encodeURIComponent(
+            "https://iyanglin.com/api/auth/wechat/callback?redirect=/profile"
+          );
+          const oauthUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${config.appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_base&state=pay_bind#wechat_redirect`;
+
+          return NextResponse.json({
+            needOAuth: true,
+            oauthUrl,
+            orderNo: order.orderNo,
+            message: "需要微信授权以拉起微信支付",
+          });
+        }
+
+        const result = await unifiedOrder({
+          orderNo: order.orderNo,
+          description: "杨林生活网 - " + order.planName,
+          amountCents: order.amountCents,
+          clientIp,
+          tradeType: "JSAPI",
+          openid: openId,
+        });
+
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const nonce = nonceStr();
+        const pkgStr = "prepay_id=" + result.prepayId;
+        const paySignParams = {
+          appId: config.appId,
+          timeStamp: timestamp,
+          nonceStr: nonce,
+          package: pkgStr,
+          signType: "MD5",
+        };
+        const paySign = signMD5(paySignParams, config.apiKey);
+
+        return NextResponse.json({
+          success: true,
+          orderNo: order.orderNo,
+          amountYuan: (order.amountCents / 100).toFixed(2),
+          amountCents: order.amountCents,
+          totalCoins,
+          paymentScene: "JSAPI",
+          jsapiParams: {
+            appId: config.appId,
+            timeStamp: timestamp,
+            nonceStr: nonce,
+            package: pkgStr,
+            signType: "MD5",
+            paySign,
+          },
+          status: "PENDING_PAYMENT",
+        });
+      }
+
+      // 手机外部浏览器 -> H5 支付
+      if (paymentScene === "H5") {
+        const sceneInfo = JSON.stringify({
+          h5_info: {
+            type: "Wap",
+            wap_url: "https://iyanglin.com",
+            wap_name: "杨林生活网",
+          },
+        });
+
+        const result = await unifiedOrder({
+          orderNo: order.orderNo,
+          description: "杨林生活网 - " + order.planName,
+          amountCents: order.amountCents,
+          clientIp,
+          tradeType: "MWEB",
+          sceneInfo,
+        });
+
+        const returnUrl = encodeURIComponent(
+          "https://iyanglin.com/payment/return?orderNo=" + order.orderNo
+        );
+
+        return NextResponse.json({
+          success: true,
+          orderNo: order.orderNo,
+          amountYuan: (order.amountCents / 100).toFixed(2),
+          amountCents: order.amountCents,
+          totalCoins,
+          paymentScene: "H5",
+          mwebUrl: result.mwebUrl + "&redirect_url=" + returnUrl,
+          status: "PENDING_PAYMENT",
+        });
+      }
+
+      // PC 网页默认 -> Native 扫码支付
+      const result = await unifiedOrder({
+        orderNo: order.orderNo,
+        description: "杨林生活网 - " + order.planName,
+        amountCents: order.amountCents,
+        clientIp,
+        tradeType: "NATIVE",
+      });
+
+      return NextResponse.json({
+        success: true,
+        orderNo: order.orderNo,
+        amountYuan: (order.amountCents / 100).toFixed(2),
+        amountCents: order.amountCents,
+        totalCoins,
+        paymentScene: "NATIVE",
+        codeUrl: result.codeUrl,
+        status: "PENDING_PAYMENT",
+        message: "微信支付订单创建成功，请扫码支付",
+      });
+    } catch (e: any) {
+      console.error("[充值微信下单失败]:", e);
+      return NextResponse.json({ error: e.message || "微信统一下单失败，请重试" }, { status: 500 });
+    }
   }
 
   // 2. 金币支付/扣费

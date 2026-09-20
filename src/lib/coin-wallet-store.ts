@@ -28,7 +28,7 @@ export async function getOrCreateCoinWallet(userId: string) {
   return wallet;
 }
 
-/** 充值金币入账 */
+/** 充值金币入账（严格幂等，必须原子更新订单为 PAID 后方能入账） */
 export async function rechargeCoins(
   userId: string,
   amountCoins: number,
@@ -38,6 +38,38 @@ export async function rechargeCoins(
   const wallet = await getOrCreateCoinWallet(userId);
 
   return prisma.$transaction(async (tx) => {
+    if (orderNo) {
+      // 1. 条件更新：必须由 PENDING_PAYMENT -> PAID 成功，才证明是首次处理！
+      const orderUpdate = await tx.billingOrder.updateMany({
+        where: { orderNo, status: "PENDING_PAYMENT" },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+
+      // 如果更新行数为 0，检查该订单是否已经由回调处理完毕或流水已存在
+      if (orderUpdate.count === 0) {
+        const existingTx = await tx.coinTransaction.findFirst({
+          where: { orderNo, type: "RECHARGE" },
+        });
+        if (existingTx) {
+          console.log(`[充值幂等] 订单 ${orderNo} 已经完成充值入账，跳过重复处理`);
+          return tx.coinWallet.findUniqueOrThrow({ where: { id: wallet.id } });
+        }
+      }
+
+      // 2. 再次防重检查流水表中是否已有相同单号
+      const existingTx = await tx.coinTransaction.findFirst({
+        where: { orderNo, type: "RECHARGE" },
+      });
+      if (existingTx) {
+        console.log(`[充值幂等] 订单 ${orderNo} 流水已存在，拒绝重复发金币`);
+        return tx.coinWallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      }
+    }
+
+    // 3. 原子增加钱包余额
+    const currentWallet = await tx.coinWallet.findUniqueOrThrow({ where: { id: wallet.id } });
+    const newBalance = currentWallet.balance + amountCoins;
+
     const updatedWallet = await tx.coinWallet.update({
       where: { id: wallet.id },
       data: {
@@ -46,6 +78,7 @@ export async function rechargeCoins(
       },
     });
 
+    // 4. 记入流水
     await tx.coinTransaction.create({
       data: {
         walletId: wallet.id,
@@ -53,6 +86,10 @@ export async function rechargeCoins(
         type: "RECHARGE",
         orderNo,
         remark,
+        balanceBefore: currentWallet.balance,
+        balanceAfter: newBalance,
+        businessType: "RECHARGE",
+        businessId: orderNo,
       },
     });
 
