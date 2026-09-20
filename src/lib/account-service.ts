@@ -100,32 +100,46 @@ export async function recordFailedLogin(
  * Resolves WeChat to one platform user. It deliberately checks the old
  * User.wechat* columns as a compatibility fallback before creating anything.
  */
-export async function resolveWechatIdentity(identity: WechatIdentity) {
+export async function resolveWechatIdentity(
+  identity: WechatIdentity,
+  currentUserId?: string
+) {
   const now = new Date();
   const avatarUrl = identity.avatarUrl
     ? identity.avatarUrl.replace(/^http:\/\//i, "https://")
     : null;
 
-  const existingWechat = await prisma.wechatAccount.findUnique({
-    where: { appId_openId: { appId: identity.appId, openId: identity.openId } },
-    include: { user: true },
-  });
+  let user: any = null;
 
-  let user = existingWechat?.user || await prisma.user.findFirst({
-    where: {
-      OR: [
-        { wechatOpenId: identity.openId },
-        ...(identity.unionId ? [{ wechatUnionId: identity.unionId }] : []),
-      ],
-    },
-  });
+  // 0. 若当前已有登录用户（例如手机号注册后在微信内调起授权绑定），优先与当前登录用户绑定
+  if (currentUserId && currentUserId !== "env-admin") {
+    user = await prisma.user.findUnique({
+      where: { id: currentUserId },
+    });
+  }
 
-  if (!user && identity.unionId) {
-    const accountByUnion = await prisma.wechatAccount.findFirst({
-      where: { unionId: identity.unionId },
+  if (!user) {
+    const existingWechat = await prisma.wechatAccount.findUnique({
+      where: { appId_openId: { appId: identity.appId, openId: identity.openId } },
       include: { user: true },
     });
-    user = accountByUnion?.user || null;
+
+    user = existingWechat?.user || await prisma.user.findFirst({
+      where: {
+        OR: [
+          { wechatOpenId: identity.openId },
+          ...(identity.unionId ? [{ wechatUnionId: identity.unionId }] : []),
+        ],
+      },
+    });
+
+    if (!user && identity.unionId) {
+      const accountByUnion = await prisma.wechatAccount.findFirst({
+        where: { unionId: identity.unionId },
+        include: { user: true },
+      });
+      user = accountByUnion?.user || null;
+    }
   }
 
   let isNewUser = false;

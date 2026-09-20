@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 }
 
 import { prisma } from "@/lib/prisma";
-import { unifiedOrder, getPayConfig, signMD5, nonceStr } from "@/lib/wechat-pay";
+import { createUnifiedPaymentOrder } from "@/lib/wechat-pay";
 
 /** POST /api/wallet/coins — 购买/充值金币套餐预下单（多场景微信支付）或金币直接扣费 */
 export async function POST(request: Request) {
@@ -77,123 +77,29 @@ export async function POST(request: Request) {
     });
 
     try {
-      const config = getPayConfig();
       const forwarded = request.headers.get("x-forwarded-for");
       const clientIp = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+      const ua = request.headers.get("user-agent") || "";
+      const isWeChat = /micromessenger/i.test(ua);
+      const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
 
-      // 微信内网页 -> JSAPI 支付
-      if (paymentScene === "JSAPI") {
-        let openId: string | null = null;
-        const wechatAccount = await prisma.wechatAccount.findFirst({
-          where: { userId: session.id, appId: config.appId },
-          select: { openId: true },
-        });
-        if (wechatAccount?.openId) {
-          openId = wechatAccount.openId;
-        } else {
-          const userObj = await prisma.user.findUnique({
-            where: { id: session.id },
-            select: { wechatOpenId: true },
-          });
-          if (userObj?.wechatOpenId) openId = userObj.wechatOpenId;
-        }
-
-        if (!openId) {
-          const redirectUri = encodeURIComponent(
-            "https://iyanglin.com/api/auth/wechat/callback?redirect=/profile"
-          );
-          const oauthUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${config.appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_base&state=pay_bind#wechat_redirect`;
-
-          return NextResponse.json({
-            needOAuth: true,
-            oauthUrl,
-            orderNo: order.orderNo,
-            message: "需要微信授权以拉起微信支付",
-          });
-        }
-
-        const result = await unifiedOrder({
-          orderNo: order.orderNo,
-          description: "杨林生活网 - " + order.planName,
-          amountCents: order.amountCents,
-          clientIp,
-          tradeType: "JSAPI",
-          openid: openId,
-        });
-
-        const timestamp = String(Math.floor(Date.now() / 1000));
-        const nonce = nonceStr();
-        const pkgStr = "prepay_id=" + result.prepayId;
-        const paySignParams = {
-          appId: config.appId,
-          timeStamp: timestamp,
-          nonceStr: nonce,
-          package: pkgStr,
-          signType: "MD5",
-        };
-        const paySign = signMD5(paySignParams, config.apiKey);
-
-        return NextResponse.json({
-          success: true,
-          orderNo: order.orderNo,
-          amountYuan: (order.amountCents / 100).toFixed(2),
-          amountCents: order.amountCents,
-          totalCoins,
-          paymentScene: "JSAPI",
-          jsapiParams: {
-            appId: config.appId,
-            timeStamp: timestamp,
-            nonceStr: nonce,
-            package: pkgStr,
-            signType: "MD5",
-            paySign,
-          },
-          status: "PENDING_PAYMENT",
-        });
+      let resolvedScene: "JSAPI" | "H5" | "NATIVE" = "NATIVE";
+      if (isWeChat || paymentScene === "JSAPI") {
+        resolvedScene = "JSAPI";
+      } else if (paymentScene === "H5" || (isMobile && paymentScene !== "NATIVE")) {
+        resolvedScene = "H5";
+      } else {
+        resolvedScene = "NATIVE";
       }
 
-      // 手机外部浏览器 -> H5 支付
-      if (paymentScene === "H5") {
-        const sceneInfo = JSON.stringify({
-          h5_info: {
-            type: "Wap",
-            wap_url: "https://iyanglin.com",
-            wap_name: "杨林生活网",
-          },
-        });
-
-        const result = await unifiedOrder({
-          orderNo: order.orderNo,
-          description: "杨林生活网 - " + order.planName,
-          amountCents: order.amountCents,
-          clientIp,
-          tradeType: "MWEB",
-          sceneInfo,
-        });
-
-        const returnUrl = encodeURIComponent(
-          "https://iyanglin.com/payment/return?orderNo=" + order.orderNo
-        );
-
-        return NextResponse.json({
-          success: true,
-          orderNo: order.orderNo,
-          amountYuan: (order.amountCents / 100).toFixed(2),
-          amountCents: order.amountCents,
-          totalCoins,
-          paymentScene: "H5",
-          mwebUrl: result.mwebUrl + "&redirect_url=" + returnUrl,
-          status: "PENDING_PAYMENT",
-        });
-      }
-
-      // PC 网页默认 -> Native 扫码支付
-      const result = await unifiedOrder({
+      const payResult = await createUnifiedPaymentOrder({
         orderNo: order.orderNo,
-        description: "杨林生活网 - " + order.planName,
         amountCents: order.amountCents,
+        description: "杨林生活网 - " + order.planName,
+        paymentScene: resolvedScene,
+        userId: session.id,
         clientIp,
-        tradeType: "NATIVE",
+        returnUrl: body.returnUrl || "/profile",
       });
 
       return NextResponse.json({
@@ -202,10 +108,14 @@ export async function POST(request: Request) {
         amountYuan: (order.amountCents / 100).toFixed(2),
         amountCents: order.amountCents,
         totalCoins,
-        paymentScene: "NATIVE",
-        codeUrl: result.codeUrl,
+        paymentScene: payResult.paymentScene,
+        needOAuth: payResult.needOAuth,
+        oauthUrl: payResult.oauthUrl,
+        jsapiParams: payResult.jsapiParams,
+        mwebUrl: payResult.mwebUrl,
+        codeUrl: payResult.codeUrl,
+        message: payResult.message || (payResult.paymentScene === "NATIVE" ? "微信支付订单创建成功，请扫码支付" : undefined),
         status: "PENDING_PAYMENT",
-        message: "微信支付订单创建成功，请扫码支付",
       });
     } catch (e: any) {
       console.error("[充值微信下单失败]:", e);

@@ -110,7 +110,39 @@ export default function NewJobPage() {
           }
         }
       })
-      .catch(() => {});
+    // 检查并恢复草稿（如微信授权重定向后）
+    if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem("jobs_new_draft");
+        if (raw) {
+          const d = JSON.parse(raw);
+          if (d.publishType) setPublishType(d.publishType);
+          if (d.title) setTitle(d.title);
+          if (d.contact) setContact(d.contact);
+          if (d.images) setImages(d.images);
+          if (d.billingPlanId) setBillingPlanId(d.billingPlanId);
+          if (d.selectedCompany) setSelectedCompany(d.selectedCompany);
+          if (d.salary) setSalary(d.salary);
+          if (d.jobType) setJobType(d.jobType);
+          if (d.area) setArea(d.area);
+          if (d.experience) setExperience(d.experience);
+          if (d.education) setEducation(d.education);
+          if (d.benefits) setBenefits(d.benefits);
+          if (d.description) setDescription(d.description);
+          if (d.name) setName(d.name);
+          if (d.age) setAge(d.age);
+          if (d.skills) setSkills(d.skills);
+          if (d.step) setStep(d.step);
+        }
+
+        if (sessionStorage.getItem("yanglin_checkout_auto_open") === "1") {
+          sessionStorage.removeItem("yanglin_checkout_auto_open");
+          setShowCheckoutModal(true);
+        }
+      } catch (e) {
+        console.warn("恢复草稿失败", e);
+      }
+    }
   }, []);
 
   const handleSearchCompany = (val: string) => {
@@ -250,11 +282,43 @@ export default function NewJobPage() {
         return setMessage(errData?.error || "提交失败，请重试");
       }
 
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("jobs_new_draft");
+        sessionStorage.removeItem("yanglin_checkout_auto_open");
+      }
       setMessage("");
       setStep(4);
     } catch (e: any) {
       console.error(e);
       setMessage("提交发生网络异常，请重试");
+    }
+  };
+
+  const saveDraft = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const draft = {
+        publishType,
+        title,
+        contact,
+        images,
+        billingPlanId,
+        selectedCompany,
+        salary,
+        jobType,
+        area,
+        experience,
+        education,
+        benefits,
+        description,
+        name,
+        age,
+        skills,
+        step,
+      };
+      sessionStorage.setItem("jobs_new_draft", JSON.stringify(draft));
+    } catch (e) {
+      console.warn("暂存草稿失败", e);
     }
   };
 
@@ -271,6 +335,10 @@ export default function NewJobPage() {
   };
 
   const resetForm = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("jobs_new_draft");
+      sessionStorage.removeItem("yanglin_checkout_auto_open");
+    }
     setTitle(""); setSalary(""); setDescription(""); setContact(""); setImages([]); setBillingPlanId("");
     setName(""); setAge(""); setSkills(""); setBenefits("");
     setStep(1);
@@ -736,6 +804,7 @@ export default function NewJobPage() {
           userBalances={userBalances}
           onSuccess={handlePaymentSuccess}
           onClose={() => setShowCheckoutModal(false)}
+          onSaveDraft={saveDraft}
         />
       </main>
     </AuthGuard>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { signSession } from "@/lib/auth";
+import { signSession, getSession } from "@/lib/auth";
 import { markConfirmed } from "@/lib/qrSessions";
 import { recordLogin, requestLoginMetadata, resolveWechatIdentity } from "@/lib/account-service";
 import { getWechatCredentials } from "@/lib/wechat-service";
@@ -102,13 +102,15 @@ export async function GET(req: Request) {
 
     // Step 3: Resolve the canonical WeChat identity before creating a user.
     // This checks both the new identity table and legacy User.wechat* records.
+    // If the user is already logged in (e.g. paying/binding), link to the existing session
+    const currentSession = await getSession(req);
     const { user, isNewUser } = await resolveWechatIdentity({
       appId,
       openId: openid,
       unionId: unionid || null,
       nickname: wxNickname,
       avatarUrl: wxAvatar,
-    });
+    }, currentSession?.id);
 
     if (isNewUser) {
       // Points creation is optional and must never prevent sign-in.

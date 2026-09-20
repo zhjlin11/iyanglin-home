@@ -9,6 +9,7 @@
  */
 
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
 /* ---------- 配置 ---------- */
 
@@ -219,3 +220,233 @@ export async function queryOrder(orderNo: string): Promise<Record<string, string
   const resText = await response.text();
   return parseXml(resText);
 }
+
+/* ---------- 统一微信支付服务封装 (JSAPI / H5 / NATIVE) ---------- */
+
+export interface WeixinJsapiParams {
+  appId: string;
+  timeStamp: string;
+  nonceStr: string;
+  package: string;
+  signType: "MD5";
+  paySign: string;
+}
+
+export interface UnifiedPaymentOrderParams {
+  orderNo: string;
+  amountCents: number;
+  description: string;
+  paymentScene?: "JSAPI" | "H5" | "NATIVE";
+  clientIp?: string;
+  userId?: string;
+  openId?: string;
+  returnUrl?: string;
+}
+
+export interface UnifiedPaymentOrderResult {
+  paymentScene: "JSAPI" | "H5" | "NATIVE";
+  orderNo: string;
+  amountCents: number;
+  needOAuth?: boolean;
+  oauthUrl?: string;
+  jsapiParams?: WeixinJsapiParams;
+  mwebUrl?: string;
+  codeUrl?: string;
+  message?: string;
+}
+
+/**
+ * 统一获取用户的微信公众号 OpenID
+ */
+export async function getWechatUserOpenId(
+  userId: string,
+  appId?: string
+): Promise<string | null> {
+  if (!userId) return null;
+  const config = getPayConfig();
+  const targetAppId = appId || config.appId;
+  if (targetAppId) {
+    const account = await prisma.wechatAccount.findFirst({
+      where: { userId, appId: targetAppId },
+      select: { openId: true },
+    });
+    if (account?.openId) return account.openId;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { wechatOpenId: true },
+  });
+  return user?.wechatOpenId || null;
+}
+
+/**
+ * 微信 JSAPI 下单快捷封装（微信内置浏览器，原生支付）
+ */
+export async function createJsapiOrder(params: {
+  orderNo: string;
+  amountCents: number;
+  description: string;
+  openid: string;
+  clientIp?: string;
+}): Promise<{ prepayId: string; jsapiParams: WeixinJsapiParams }> {
+  const config = getPayConfig();
+  const result = await unifiedOrder({
+    orderNo: params.orderNo,
+    description: params.description,
+    amountCents: params.amountCents,
+    clientIp: params.clientIp || "127.0.0.1",
+    tradeType: "JSAPI",
+    openid: params.openid,
+  });
+
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = nonceStr();
+  const pkgStr = "prepay_id=" + result.prepayId;
+  const paySignParams = {
+    appId: config.appId,
+    timeStamp: timestamp,
+    nonceStr: nonce,
+    package: pkgStr,
+    signType: "MD5",
+  };
+  const paySign = signMD5(paySignParams, config.apiKey);
+
+  return {
+    prepayId: result.prepayId,
+    jsapiParams: {
+      appId: config.appId,
+      timeStamp: timestamp,
+      nonceStr: nonce,
+      package: pkgStr,
+      signType: "MD5",
+      paySign,
+    },
+  };
+}
+
+/**
+ * 微信 H5 下单快捷封装（普通手机外部浏览器，跳转微信支付）
+ */
+export async function createH5Order(params: {
+  orderNo: string;
+  amountCents: number;
+  description: string;
+  clientIp?: string;
+  returnUrl?: string;
+}): Promise<{ prepayId: string; mwebUrl: string }> {
+  const sceneInfo = JSON.stringify({
+    h5_info: {
+      type: "Wap",
+      wap_url: "https://iyanglin.com",
+      wap_name: "杨林生活网",
+    },
+  });
+
+  const result = await unifiedOrder({
+    orderNo: params.orderNo,
+    description: params.description,
+    amountCents: params.amountCents,
+    clientIp: params.clientIp || "127.0.0.1",
+    tradeType: "MWEB",
+    sceneInfo,
+  });
+
+  const redirectUrl = params.returnUrl
+    ? encodeURIComponent(
+        params.returnUrl.startsWith("http")
+          ? params.returnUrl
+          : `https://iyanglin.com${params.returnUrl}`
+      )
+    : encodeURIComponent(`https://iyanglin.com/payment/return?orderNo=${params.orderNo}`);
+  const mwebUrl = (result.mwebUrl || "") + "&redirect_url=" + redirectUrl;
+
+  return {
+    prepayId: result.prepayId,
+    mwebUrl,
+  };
+}
+
+/**
+ * 统一微信支付下单入口（智能裁决 JSAPI / H5 / NATIVE）
+ */
+export async function createUnifiedPaymentOrder(
+  params: UnifiedPaymentOrderParams
+): Promise<UnifiedPaymentOrderResult> {
+  const scene = params.paymentScene || "NATIVE";
+  const clientIp = params.clientIp || "127.0.0.1";
+  const config = getPayConfig();
+
+  // 1. 微信内置浏览器 -> JSAPI 支付
+  if (scene === "JSAPI") {
+    let openId = params.openId;
+    if (!openId && params.userId) {
+      openId = (await getWechatUserOpenId(params.userId, config.appId)) || undefined;
+    }
+
+    if (!openId) {
+      const returnTarget = params.returnUrl || "/profile";
+      const redirectUri = encodeURIComponent(
+        `https://iyanglin.com/api/auth/wechat/callback?redirect=${encodeURIComponent(returnTarget)}`
+      );
+      const oauthUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${config.appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_base&state=pay_bind#wechat_redirect`;
+
+      return {
+        paymentScene: "JSAPI",
+        orderNo: params.orderNo,
+        amountCents: params.amountCents,
+        needOAuth: true,
+        oauthUrl,
+        message: "需要微信授权以拉起微信支付",
+      };
+    }
+
+    const { jsapiParams } = await createJsapiOrder({
+      orderNo: params.orderNo,
+      amountCents: params.amountCents,
+      description: params.description,
+      openid: openId,
+      clientIp,
+    });
+
+    return {
+      paymentScene: "JSAPI",
+      orderNo: params.orderNo,
+      amountCents: params.amountCents,
+      jsapiParams,
+    };
+  }
+
+  // 2. 外部手机浏览器 -> H5 支付
+  if (scene === "H5") {
+    const { mwebUrl } = await createH5Order({
+      orderNo: params.orderNo,
+      amountCents: params.amountCents,
+      description: params.description,
+      clientIp,
+      returnUrl: params.returnUrl,
+    });
+
+    return {
+      paymentScene: "H5",
+      orderNo: params.orderNo,
+      amountCents: params.amountCents,
+      mwebUrl,
+    };
+  }
+
+  // 3. 桌面电脑浏览器 -> NATIVE 扫码支付
+  const nativeRes = await createNativeOrder({
+    orderNo: params.orderNo,
+    amountCents: params.amountCents,
+    description: params.description,
+    clientIp,
+  });
+
+  return {
+    paymentScene: "NATIVE",
+    orderNo: params.orderNo,
+    amountCents: params.amountCents,
+    codeUrl: nativeRes.codeUrl,
+  };
+}
+

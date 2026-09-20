@@ -1,6 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import {
+  detectPaymentScene,
+  invokeWeixinPay,
+  isWeChatBrowser,
+  PaymentScene,
+} from "@/lib/payment-utils";
 
 export interface BillingQuoteData {
   id?: string;
@@ -32,6 +38,7 @@ interface BillingCheckoutModalProps {
   userBalances?: UserBalances;
   onSuccess: (entitlementId: string) => void;
   onClose: () => void;
+  onSaveDraft?: () => void;
 }
 
 export default function BillingCheckoutModal({
@@ -40,11 +47,16 @@ export default function BillingCheckoutModal({
   userBalances = { coins: 0, points: 0 },
   onSuccess,
   onClose,
+  onSaveDraft,
 }: BillingCheckoutModalProps) {
   const [selectedMethod, setSelectedMethod] = useState<"RMB" | "COIN" | "POINT">("RMB");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [balances, setBalances] = useState<UserBalances>(userBalances);
+
+  // 支付场景与微信支付状态
+  const [paymentScene, setPaymentScene] = useState<PaymentScene>("NATIVE");
+  const [wechatStatus, setWechatStatus] = useState<"IDLE" | "INVOKING" | "POLLING">("IDLE");
 
   // 微信扫码状态
   const [qrCodeUrl, setQrCodeUrl] = useState("");
@@ -53,6 +65,7 @@ export default function BillingCheckoutModal({
 
   useEffect(() => {
     setBalances(userBalances);
+    setPaymentScene(detectPaymentScene());
   }, [userBalances]);
 
   // 轮询支付状态
@@ -67,6 +80,7 @@ export default function BillingCheckoutModal({
           if (data.paid && data.entitlementId) {
             clearInterval(timer);
             setIsPolling(false);
+            setWechatStatus("IDLE");
             onSuccess(data.entitlementId);
           }
         } catch (e) {
@@ -95,7 +109,6 @@ export default function BillingCheckoutModal({
     setErrorMsg("");
 
     try {
-
       if (method === "COIN") {
         const res = await fetch("/api/billing/pay-quote", {
           method: "POST",
@@ -125,18 +138,81 @@ export default function BillingCheckoutModal({
       }
 
       if (method === "RMB") {
+        const scene = detectPaymentScene();
+        setPaymentScene(scene);
+        if (scene === "JSAPI") {
+          setWechatStatus("INVOKING");
+        }
+
         const res = await fetch("/api/billing/pay-quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quoteId: quote.id, payMethod: "WECHAT_NATIVE" }),
+          body: JSON.stringify({
+            quoteId: quote.id,
+            payMethod: "WECHAT",
+            paymentScene: scene,
+            returnUrl:
+              typeof window !== "undefined"
+                ? window.location.pathname + window.location.search
+                : "/jobs/new",
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
+          setWechatStatus("IDLE");
           throw new Error(data.error || "微信下单失败");
         }
-        setCurrentOrderNo(data.orderNo);
-        setQrCodeUrl(data.codeUrl);
-        setIsPolling(true);
+
+        // 1. 静默授权跳转（仅当微信内置浏览器且用户尚未绑定 openId）
+        if (data.needOAuth && data.oauthUrl) {
+          setWechatStatus("IDLE");
+          onSaveDraft?.();
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("yanglin_checkout_auto_open", "1");
+            window.location.href = data.oauthUrl;
+          }
+          return;
+        }
+
+        // 2. JSAPI 微信内置浏览器调起微信原生支付控件（杜绝任何二维码）
+        if (data.paymentScene === "JSAPI" && data.jsapiParams) {
+          setCurrentOrderNo(data.orderNo);
+          try {
+            const payRes = await invokeWeixinPay(data.jsapiParams);
+            if (payRes === "success") {
+              setWechatStatus("POLLING");
+              setIsPolling(true);
+            } else if (payRes === "cancel") {
+              setWechatStatus("IDLE");
+              setErrorMsg("您已在微信中取消支付，可点击下方按钮重新发起");
+            } else {
+              setWechatStatus("IDLE");
+              setErrorMsg("微信支付未能成功完成，请重试");
+            }
+          } catch (bridgeErr: any) {
+            setWechatStatus("IDLE");
+            setErrorMsg(bridgeErr?.message || "拉起微信支付控件失败");
+          }
+          return;
+        }
+
+        // 3. 手机外部浏览器 H5 支付跳转
+        if (data.paymentScene === "H5" && data.mwebUrl) {
+          setWechatStatus("IDLE");
+          window.location.href = data.mwebUrl;
+          return;
+        }
+
+        // 4. PC 桌面电脑扫码支付（仅限 NATIVE，展示二维码）
+        if (data.codeUrl) {
+          setWechatStatus("IDLE");
+          setCurrentOrderNo(data.orderNo);
+          setQrCodeUrl(data.codeUrl);
+          setIsPolling(true);
+          return;
+        }
+
+        throw new Error(data.error || "未能获取有效的微信支付信息");
       }
     } catch (err: any) {
       setErrorMsg(err.message || "支付发起失败，请重试");
@@ -253,8 +329,28 @@ export default function BillingCheckoutModal({
             </div>
           )}
 
-          {/* 微信二维码展示 */}
-          {qrCodeUrl ? (
+          {/* 微信内 JSAPI 支付调用与确认状态 */}
+          {wechatStatus !== "IDLE" ? (
+            <div style={{ textAlign: "center", padding: "32px 16px" }}>
+              <div style={{ fontSize: "40px", marginBottom: "14px" }}>
+                {wechatStatus === "POLLING" ? "🔄" : "📱"}
+              </div>
+              <div style={{ fontSize: "16px", fontWeight: "800", color: "#0F172A", marginBottom: "8px" }}>
+                {wechatStatus === "POLLING" ? "微信支付已完成，正在确认到账..." : "正在调起微信支付原生面板..."}
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748B", lineHeight: "1.6", maxWidth: "320px", margin: "0 auto" }}>
+                {wechatStatus === "POLLING"
+                  ? "系统正与微信官方实时确认发券，核验成功后将自动提交发布"
+                  : "请在微信原生弹窗中完成指纹或密码支付；若未自动弹出，可点击下方重新调起"}
+              </div>
+              {wechatStatus === "POLLING" && (
+                <div style={{ marginTop: "16px", display: "inline-block", padding: "6px 16px", background: "#ECFDF5", borderRadius: "20px", color: "#059669", fontSize: "12px", fontWeight: "700" }}>
+                  ✓ 微信交易指令已确认 · 正在自动出单
+                </div>
+              )}
+            </div>
+          ) : (paymentScene === "NATIVE" && qrCodeUrl) ? (
+            /* 微信二维码展示（仅限 PC NATIVE 场景，手机微信内绝对不展示） */
             <div style={{ textAlign: "center", padding: "12px 0" }}>
               <div style={{ fontSize: "14px", fontWeight: "700", color: "#1E293B", marginBottom: "8px" }}>
                 微信扫码支付 {quote.priceRmbDisplay}
@@ -280,7 +376,7 @@ export default function BillingCheckoutModal({
                 />
               </div>
               <div style={{ fontSize: "12px", color: "#64748B", marginBottom: "16px" }}>
-                打开手机微信扫一扫，支付成功后系统将自动完成发布
+                请打开手机微信扫一扫，支付成功后系统将自动完成发布
               </div>
             </div>
           ) : (
@@ -323,11 +419,20 @@ export default function BillingCheckoutModal({
                       微
                     </div>
                     <div>
-                      <div style={{ fontSize: "15px", fontWeight: "700", color: "#0F172A" }}>
-                        微信支付 (人民币)
+                      <div style={{ fontSize: "15px", fontWeight: "700", color: "#0F172A", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>微信支付 (人民币)</span>
+                        {paymentScene === "JSAPI" && (
+                          <span style={{ fontSize: "11px", background: "#07C160", color: "white", padding: "1px 6px", borderRadius: "4px", fontWeight: "600" }}>
+                            原生直连
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: "12px", color: "#64748B" }}>
-                        即时到账 · 官方微信安全支付
+                        {paymentScene === "JSAPI"
+                          ? "微信内置安全支付 · 直接拉起原生支付面板"
+                          : paymentScene === "H5"
+                          ? "微信快捷支付 · 跳转微信客户端"
+                          : "即时到账 · 官方微信安全支付"}
                       </div>
                     </div>
                   </div>
@@ -445,8 +550,8 @@ export default function BillingCheckoutModal({
           )}
         </div>
 
-        {/* 底部按钮栏 */}
-        {!qrCodeUrl && (
+        {/* 底部按钮栏：当在 PC 展示二维码时隐藏底部支付按钮；若在微信内则展示直连调起按钮 */}
+        {!(paymentScene === "NATIVE" && qrCodeUrl) && (
           <div
             style={{
               padding: "16px 24px",
@@ -481,7 +586,8 @@ export default function BillingCheckoutModal({
               disabled={
                 loading ||
                 (selectedMethod === "COIN" && !canUseCoin) ||
-                (selectedMethod === "POINT" && !canUsePoint)
+                (selectedMethod === "POINT" && !canUsePoint) ||
+                wechatStatus === "POLLING"
               }
               style={{
                 flex: 1,
@@ -503,7 +609,8 @@ export default function BillingCheckoutModal({
                 fontWeight: "700",
                 cursor:
                   (selectedMethod === "COIN" && !canUseCoin) ||
-                  (selectedMethod === "POINT" && !canUsePoint)
+                  (selectedMethod === "POINT" && !canUsePoint) ||
+                  wechatStatus === "POLLING"
                     ? "not-allowed"
                     : "pointer",
                 boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
@@ -511,6 +618,8 @@ export default function BillingCheckoutModal({
             >
               {loading
                 ? "支付处理中..."
+                : wechatStatus === "POLLING"
+                ? "正在核实到账..."
                 : selectedMethod === "COIN"
                 ? canUseCoin
                   ? `确认使用 ${quote.priceCoinsDisplay} 支付`
@@ -519,6 +628,8 @@ export default function BillingCheckoutModal({
                 ? canUsePoint
                   ? `确认使用 ${quote.pricePointsDisplay} 兑换`
                   : "积分不足，请使用微信支付"
+                : paymentScene === "JSAPI"
+                ? `微信支付 ${quote.priceRmbDisplay} (原生调起)`
                 : `立即微信支付 ${quote.priceRmbDisplay}`}
             </button>
           </div>

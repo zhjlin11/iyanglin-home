@@ -6,7 +6,7 @@ import {
   payQuoteByPoint,
   getUserAssetBalances,
 } from "@/lib/billing-guard";
-import { createNativeOrder, getPayConfig } from "@/lib/wechat-pay";
+import { createUnifiedPaymentOrder, queryOrder, getPayConfig } from "@/lib/wechat-pay";
 
 /**
  * POST /api/billing/pay-quote — 支付报价快照并获取权益凭证
@@ -83,8 +83,14 @@ export async function POST(request: Request) {
     }
   }
 
-  // 3. 微信扫码支付 (RMB)
-  if (payMethod === "WECHAT_NATIVE") {
+  // 3. 微信人民币支付 (智能适配 JSAPI, H5, NATIVE，微信内绝对不展示二维码)
+  if (
+    payMethod === "WECHAT_NATIVE" ||
+    payMethod === "WECHAT" ||
+    payMethod === "WECHAT_JSAPI" ||
+    payMethod === "WECHAT_H5" ||
+    payMethod === "RMB"
+  ) {
     try {
       const orderNo = `RMB${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
       const amountCents = quote.priceRmbCents;
@@ -108,31 +114,50 @@ export async function POST(request: Request) {
         },
       });
 
-      // 尝试调用微信 Native 支付下单
-      let codeUrl = "";
-      try {
-        const payConfig = getPayConfig();
-        if (payConfig.appId && payConfig.mchId && payConfig.apiKey) {
-          const wxRes = await createNativeOrder({
-            orderNo,
-            amountCents,
-            description: `杨林在线-${quote.module}发帖服务`,
-          });
-          codeUrl = wxRes.codeUrl || "";
-        }
-      } catch (wxErr: any) {
-        console.warn("[pay-quote] 微信支付直连未配置或失败，切换调试模式:", wxErr.message);
+      // 智能识别支付场景：根据 User-Agent 与前端场景标识
+      const ua = request.headers.get("user-agent") || "";
+      const isWeChat = /micromessenger/i.test(ua);
+      const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
+      const requestedScene = body.paymentScene;
+
+      let paymentScene: "JSAPI" | "H5" | "NATIVE" = "NATIVE";
+      if (isWeChat || requestedScene === "JSAPI" || payMethod === "WECHAT_JSAPI") {
+        paymentScene = "JSAPI";
+      } else if (requestedScene === "H5" || payMethod === "WECHAT_H5" || (isMobile && payMethod !== "WECHAT_NATIVE" && requestedScene !== "NATIVE")) {
+        paymentScene = "H5";
+      } else {
+        paymentScene = "NATIVE";
       }
+
+      const forwarded = request.headers.get("x-forwarded-for");
+      const clientIp = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+      const returnUrl = body.returnUrl || `/jobs/new`;
+
+      const payResult = await createUnifiedPaymentOrder({
+        orderNo,
+        amountCents,
+        description: `杨林在线-${quote.module}发帖服务`,
+        paymentScene,
+        userId: session.id,
+        clientIp,
+        returnUrl,
+      });
 
       return NextResponse.json({
         success: true,
-        payMethod: "WECHAT_NATIVE",
+        payMethod: "WECHAT",
+        paymentScene: payResult.paymentScene,
         orderNo,
-        codeUrl: codeUrl || `/api/payment/mock-qr?orderNo=${orderNo}&amount=${amountCents}`,
         amountRmbCents: amountCents,
-        isMock: !codeUrl,
+        needOAuth: payResult.needOAuth,
+        oauthUrl: payResult.oauthUrl,
+        jsapiParams: payResult.jsapiParams,
+        mwebUrl: payResult.mwebUrl,
+        codeUrl: payResult.codeUrl,
+        message: payResult.message,
       });
     } catch (e: any) {
+      console.error("[pay-quote] 微信下单失败:", e);
       return NextResponse.json({ error: e.message || "微信下单失败" }, { status: 500 });
     }
   }
@@ -183,10 +208,67 @@ export async function GET(request: Request) {
   }
 
   if (orderNo) {
-    const order = await prisma.billingOrder.findUnique({
+    let order = await prisma.billingOrder.findUnique({
       where: { orderNo },
     });
     if (!order) return NextResponse.json({ error: "订单未找到" }, { status: 404 });
+
+    // 若本地仍为 PENDING_PAYMENT，向微信官方实时对账，防止回调网络延迟
+    if (order.status !== "PAID") {
+      try {
+        const wxQuery = await queryOrder(orderNo);
+        if (
+          wxQuery.return_code === "SUCCESS" &&
+          wxQuery.result_code === "SUCCESS" &&
+          wxQuery.trade_state === "SUCCESS"
+        ) {
+          const totalFee = parseInt(wxQuery.total_fee || "0", 10);
+          if (totalFee === order.amountCents) {
+            // 微信核验真实到账，执行事务原子发券并标记已支付
+            const updated = await prisma.$transaction(async (tx) => {
+              const freshOrder = await tx.billingOrder.findUnique({ where: { orderNo } });
+              if (!freshOrder || freshOrder.status === "PAID") return freshOrder;
+
+              let entId = freshOrder.entitlementId;
+              if (freshOrder.quoteId) {
+                const quote = await tx.billingQuote.findUnique({ where: { id: freshOrder.quoteId } });
+                if (quote) {
+                  await tx.billingQuote.update({ where: { id: quote.id }, data: { status: "PAID" } });
+                  const ent = await tx.billingEntitlement.create({
+                    data: {
+                      userId: quote.userId,
+                      companyId: quote.companyId,
+                      module: quote.module,
+                      action: quote.action,
+                      assetType: "RMB",
+                      sourceOrderId: freshOrder.id,
+                      quoteId: quote.id,
+                      status: "AVAILABLE",
+                      expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
+                    },
+                  });
+                  entId = ent.id;
+                }
+              }
+
+              return tx.billingOrder.update({
+                where: { orderNo },
+                data: {
+                  status: "PAID",
+                  paidAt: new Date(),
+                  entitlementId: entId,
+                },
+              });
+            });
+            if (updated) {
+              order = updated;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn("[pay-quote GET] 主动核查微信订单状态异常:", err.message);
+      }
+    }
 
     return NextResponse.json({
       paid: order.status === "PAID",
