@@ -6,14 +6,19 @@ import { createPortal } from "react-dom";
 import Navbar from "@/components/Navbar";
 import Link from "next/link";
 import { PromotionSheet } from "@/components/info/PromotionSheet";
+import IdentityChannelsCard from "@/components/profile/IdentityChannelsCard";
 
 type UserProfile = {
   id: string;
   username: string;
   nickname?: string;
+  phone?: string | null;
   avatar?: string;
   wechatAvatar?: string;
   wechatNickname?: string;
+  wechatBound?: boolean;
+  officialAccountFollowStatus?: string;
+  wechatSubscribed?: boolean;
   role: string;
   status: string;
   createdAt: string;
@@ -2158,6 +2163,7 @@ export default function ProfilePage() {
               {/* 账号安全 */}
               {activeTab === "security" && (
                 <div>
+                  <IdentityChannelsCard user={user} />
                   <div style={{ background: "#fff", borderRadius: "14px", padding: "18px", marginBottom: "16px" }}>
                     <div style={{ fontSize: "15px", fontWeight: "700", color: "#1F2937", marginBottom: "14px" }}>修改登录密码</div>
                     {secMsg && <div style={{ background: "#ECFDF5", color: "#065F46", padding: "8px 12px", borderRadius: "8px", marginBottom: "10px", fontSize: "13px", fontWeight: "600" }}>{secMsg}</div>}
@@ -3324,9 +3330,11 @@ export default function ProfilePage() {
             {activeTab === "security" && (
               <div>
                 <div style={{ marginBottom: "1.5rem", paddingBottom: "0.75rem", borderBottom: "1px solid #f1f5f9" }}>
-                  <h2 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: 0, color: "#0f172a" }}>🔒 账号安全中心</h2>
-                  <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>修改个人登录密码与全平台设备登录管理</p>
+                  <h2 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: 0, color: "#0f172a" }}>🔒 账号安全与身份中心</h2>
+                  <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>全渠道账号状态、微信生态连接与登录安全管理</p>
                 </div>
+
+                <IdentityChannelsCard user={user} />
 
                 {secMsg && <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "10px 14px", borderRadius: "8px", marginBottom: "1rem", fontWeight: "bold" }}>{secMsg}</div>}
                 {secErr && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "1rem", fontWeight: "bold" }}>{secErr}</div>}

@@ -24,6 +24,9 @@ export async function GET(request: Request) {
       id: true,
       username: true,
       nickname: true,
+      phone: true,
+      wechatOpenId: true,
+      wechatUnionId: true,
       wechatNickname: true,
       avatar: true,
       wechatAvatar: true,
@@ -42,11 +45,31 @@ export async function GET(request: Request) {
   const avatar = user.avatar || user.wechatAvatar || null;
   const wechatSubscription = await getWechatSubscriptionForUser(user.id);
 
+  const wechatBound = Boolean(user.wechatOpenId || user.wechatUnionId);
+  const officialAccountFollowStatus: "FOLLOWED" | "NOT_FOLLOWED" | "UNKNOWN" = wechatSubscription?.subscribed
+    ? "FOLLOWED"
+    : wechatBound
+    ? "NOT_FOLLOWED"
+    : "UNKNOWN";
+
+  const maskedPhone = user.phone && user.phone.length >= 7
+    ? `${user.phone.slice(0, 3)}****${user.phone.slice(-4)}`
+    : user.phone || null;
+
   return NextResponse.json({
     user: {
-      ...user,
+      id: user.id,
+      username: user.username,
+      nickname: user.nickname,
+      phone: maskedPhone,
       avatar,
       displayName,
+      role: user.role,
+      createdAt: user.createdAt,
+      wechatBound,
+      wechatNickname: user.wechatNickname || null,
+      wechatAvatar: user.wechatAvatar || null,
+      officialAccountFollowStatus,
       wechatSubscribed: wechatSubscription?.subscribed ?? false,
     },
   });
