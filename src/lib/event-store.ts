@@ -110,9 +110,10 @@ export async function createEvent(input: {
   authorId?: string;
   images?: string[];
   oldId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
-  const item = await prisma.event.create({
+  const item = await db.event.create({
     data: {
       title: input.title,
       category: input.category || "outdoor",
@@ -129,7 +130,7 @@ export async function createEvent(input: {
     },
   });
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       userId: input.authorId,
       action: `CREATE_EVENT_${status}`,

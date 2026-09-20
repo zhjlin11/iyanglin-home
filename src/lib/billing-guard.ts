@@ -94,18 +94,30 @@ export async function getModuleChargeConfig(moduleKey: string) {
   });
 
   if (!config) {
+    const isDefaultFree = ["house", "event", "post", "article", "industrial"].includes(moduleKey);
+    const moduleNameMap: Record<string, string> = {
+      job: "招聘求职",
+      listing: "分类信息",
+      shop: "好店入驻",
+      love: "相亲交友",
+      house: "房产楼市",
+      event: "同城活动",
+      post: "社区贴子",
+      article: "新闻资讯",
+      industrial: "园区招商",
+    };
     config = await prisma.chargeConfig.create({
       data: {
         moduleKey,
-        moduleName: moduleKey === "job" ? "招聘信息" : moduleKey,
-        unitPrice: 500,
-        isFree: false,
+        moduleName: moduleNameMap[moduleKey] || moduleKey,
+        unitPrice: isDefaultFree ? 0 : 500,
+        isFree: isDefaultFree,
         isEnabled: true,
         freePostCount: 1,
         allowRmb: true,
-        priceRmbCents: 500,
+        priceRmbCents: isDefaultFree ? 0 : 500,
         allowCoin: true,
-        priceCoins: 50,
+        priceCoins: isDefaultFree ? 0 : 50,
         allowPoint: false,
         pricePoints: 500,
         freeQuota: 1,
@@ -597,4 +609,199 @@ export async function consumeEntitlement(params: {
       usedAt: new Date(),
     },
   });
+}
+
+/**
+ * 统一商业化发布事务门禁 (Transactional Billing Guard)
+ *
+ * 核心保障：
+ * 1. 事务强一致性：权益核销/免费额度扣减 与 业务实体创建 在同一 prisma.$transaction 中完成。
+ * 2. 凭证严格匹配：校验 userId、module、action、companyId、status=AVAILABLE、未过期。
+ * 3. 额度并发防刷：在数据库事务中排他性校验 BillingQuotaUsage。
+ * 4. 门禁全覆盖：根据 ChargeConfig 动态判断，支持全站免费或模块按策略收费。
+ */
+export async function executePublishWithBillingGuard<T>(params: {
+  module: string;
+  action?: "PUBLISH" | "PIN" | "HIGHLIGHT" | "REFRESH";
+  userId: string;
+  userRole?: string;
+  companyId?: string | null;
+  entitlementId?: string | null;
+  adminBypass?: boolean;
+  createResource: (tx: any) => Promise<T>;
+}): Promise<
+  | { success: true; item: T; entitlementId?: string }
+  | { success: false; needPayment: true; quote: BillingQuoteResult; error: string }
+> {
+  const action = params.action || "PUBLISH";
+  const roleUpper = String(params.userRole || "").toUpperCase();
+  const isAdmin = roleUpper === "ADMIN";
+
+  // 管理员跳过计费
+  if (params.adminBypass && isAdmin) {
+    const item = await prisma.$transaction(async (tx) => {
+      return params.createResource(tx);
+    });
+    return { success: true, item };
+  }
+
+  // 1. 如果前端传入了预购权益凭证 (entitlementId)
+  if (params.entitlementId && typeof params.entitlementId === "string" && params.entitlementId.trim()) {
+    const entId = params.entitlementId.trim();
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const ent = await tx.billingEntitlement.findUnique({
+          where: { id: entId },
+        });
+
+        if (!ent) {
+          throw new Error("支付权益凭证不存在");
+        }
+        if (ent.userId !== params.userId) {
+          throw new Error("无权使用该权益凭证（非当前登录用户持有）");
+        }
+        if (ent.module.toLowerCase() !== params.module.toLowerCase()) {
+          throw new Error(`权益凭证业务类型不匹配：该凭证适用于 ${ent.module}，不可用于 ${params.module}`);
+        }
+        if (ent.action.toUpperCase() !== action.toUpperCase()) {
+          throw new Error(`权益凭证操作类型不匹配：该凭证适用于 ${ent.action}，不可用于 ${action}`);
+        }
+        if (params.companyId && ent.companyId && ent.companyId !== params.companyId) {
+          throw new Error("权益凭证企业主体不匹配");
+        }
+        if (ent.status !== "AVAILABLE") {
+          throw new Error("权益凭证已被核销或已失效，请重新购买");
+        }
+        if (ent.expiresAt < new Date()) {
+          throw new Error("权益凭证已过期，请重新购买");
+        }
+
+        // 创建内容实体
+        const item = await params.createResource(tx);
+        const resourceId = (item as any)?.id ? String((item as any).id) : null;
+
+        // 原子核销权益凭证并关联 resourceId
+        await tx.billingEntitlement.update({
+          where: { id: ent.id },
+          data: {
+            status: "CONSUMED",
+            resourceId,
+            usedAt: new Date(),
+          },
+        });
+
+        return { item, entitlementId: ent.id };
+      });
+
+      return { success: true, item: result.item, entitlementId: result.entitlementId };
+    } catch (err: any) {
+      throw new Error(err.message || "权益核销失败，发布已取消");
+    }
+  }
+
+  // 2. 未传入权益凭证 -> 服务端事务内检查 ChargeConfig 与免费额度
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const globalFree = await checkGlobalFreeCampaign();
+      const config = await getModuleChargeConfig(params.module);
+      const periodKey = getQuotaPeriodKey(config.quotaPeriod || "30D");
+      const freeQuota = config.freeQuota ?? 1;
+
+      let isFreeApproved = false;
+      let freeReason = "";
+
+      if (globalFree.isFree) {
+        isFreeApproved = true;
+        freeReason = "GLOBAL_CAMPAIGN_FREE";
+      } else if (config.isFree) {
+        isFreeApproved = true;
+        freeReason = "MODULE_ALWAYS_FREE";
+      } else {
+        // 检查当前主体的免费配额
+        const existingUsage = params.companyId
+          ? await tx.billingQuotaUsage.findFirst({
+              where: { companyId: params.companyId, module: params.module, action, periodKey },
+            })
+          : await tx.billingQuotaUsage.findFirst({
+              where: { userId: params.userId, module: params.module, action, periodKey },
+            });
+
+        const currentUsed = existingUsage ? existingUsage.usedCount : 0;
+        if (currentUsed < freeQuota) {
+          isFreeApproved = true;
+          freeReason = "FREE_QUOTA";
+
+          // 原子扣减/计次免费额度
+          if (existingUsage) {
+            await tx.billingQuotaUsage.update({
+              where: { id: existingUsage.id },
+              data: { usedCount: { increment: 1 } },
+            });
+          } else {
+            await tx.billingQuotaUsage.create({
+              data: {
+                userId: params.companyId ? null : params.userId,
+                companyId: params.companyId || null,
+                module: params.module,
+                action,
+                periodKey,
+                usedCount: 1,
+              },
+            });
+          }
+        }
+      }
+
+      if (!isFreeApproved) {
+        // 额度已用尽，抛出特定异常使事务回滚，外部捕获生成报价
+        const err: any = new Error("FREE_QUOTA_EXHAUSTED");
+        err.code = "NEED_PAYMENT";
+        throw err;
+      }
+
+      // 免费通过 -> 创建内容
+      const item = await params.createResource(tx);
+      const resourceId = (item as any)?.id ? String((item as any).id) : null;
+
+      // 生成免费核销存证
+      const freeEntitlement = await tx.billingEntitlement.create({
+        data: {
+          userId: params.userId,
+          companyId: params.companyId || null,
+          module: params.module,
+          action,
+          assetType: freeReason === "FREE_QUOTA" ? "FREE_QUOTA" : "FREE_PROMO",
+          status: "CONSUMED",
+          resourceId,
+          usedAt: new Date(),
+          expiresAt: new Date(Date.now() + 365 * 86400000),
+        },
+      });
+
+      return { item, entitlementId: freeEntitlement.id };
+    });
+
+    return { success: true, item: result.item, entitlementId: result.entitlementId };
+  } catch (err: any) {
+    if (err.code === "NEED_PAYMENT") {
+      // 额度用尽 -> 生成防篡改报价快照返回前端收银台
+      const quote = await generateBillingQuote({
+        module: params.module,
+        action,
+        subjectType: params.companyId ? "COMPANY" : "USER",
+        subjectId: params.companyId || params.userId,
+        userId: params.userId,
+      });
+
+      return {
+        success: false,
+        needPayment: true,
+        quote,
+        error: `免费发布额度已用完，需支付后发布 (${quote.priceRmbDisplay} / ${quote.priceCoinsDisplay})`,
+      };
+    }
+
+    throw err;
+  }
 }

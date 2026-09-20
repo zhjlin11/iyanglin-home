@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createDatingProfile, listDatingProfiles, updateDatingProfile } from "@/lib/love-store";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,27 +35,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "昵称、职业、个人介绍、择偶要求及联系方式不能为空" }, { status: 400 });
   }
 
+  const roleUpper = String(session.role || "").toUpperCase();
+  const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
   const statusInput = typeof body.status === "string" ? body.status.toLowerCase() : "pending";
-  const status = session.role === "ADMIN" ? statusInput : "pending";
+  const status = isAdmin ? statusInput : "pending";
   const authorId = session.id;
 
-  const item = await createDatingProfile({
-    gender: typeof body.gender === "string" ? body.gender.trim() : "female",
-    nickname: String(body.nickname).trim(),
-    birthYear: typeof body.birthYear === "number" ? body.birthYear : parseInt(body.birthYear) || 1995,
-    heightCm: typeof body.heightCm === "number" ? body.heightCm : parseInt(body.heightCm) || 165,
-    education: typeof body.education === "string" ? body.education.trim() : "本科",
-    occupation: String(body.occupation).trim(),
-    income: typeof body.income === "string" && body.income.trim() ? body.income.trim() : "5000-8000元/月",
-    maritalStatus: typeof body.maritalStatus === "string" ? body.maritalStatus.trim() : "未婚",
-    location: typeof body.location === "string" ? body.location.trim() : "杨林本地",
-    requirement: String(body.requirement).trim(),
-    intro: String(body.intro).trim(),
-    contact: String(body.contact).trim(),
-    status,
-    authorId,
-    photos: Array.isArray(body.photos) ? body.photos : [],
+  const publishResult = await executePublishWithBillingGuard({
+    module: "love",
+    action: "PUBLISH",
+    userId: authorId,
+    userRole: session.role,
+    entitlementId: body.entitlementId,
+    adminBypass: isAdmin,
+    createResource: async (tx) => {
+      return createDatingProfile(
+        {
+          gender: typeof body.gender === "string" ? body.gender.trim() : "female",
+          nickname: String(body.nickname).trim(),
+          birthYear: typeof body.birthYear === "number" ? body.birthYear : parseInt(body.birthYear) || 1995,
+          heightCm: typeof body.heightCm === "number" ? body.heightCm : parseInt(body.heightCm) || 165,
+          education: typeof body.education === "string" ? body.education.trim() : "本科",
+          occupation: String(body.occupation).trim(),
+          income: typeof body.income === "string" && body.income.trim() ? body.income.trim() : "5000-8000元/月",
+          maritalStatus: typeof body.maritalStatus === "string" ? body.maritalStatus.trim() : "未婚",
+          location: typeof body.location === "string" ? body.location.trim() : "杨林本地",
+          requirement: String(body.requirement).trim(),
+          intro: String(body.intro).trim(),
+          contact: String(body.contact).trim(),
+          status,
+          authorId,
+          photos: Array.isArray(body.photos) ? body.photos : [],
+        },
+        tx
+      );
+    },
   });
+
+  if (!publishResult.success && publishResult.needPayment) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "NEED_PAYMENT",
+        error: publishResult.error,
+        quote: publishResult.quote,
+      },
+      { status: 402 }
+    );
+  }
+
+  const item = (publishResult as any).item;
 
   return NextResponse.json({ item }, { status: 201 });
 }

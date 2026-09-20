@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createShop, listShops, updateShop, deleteShop } from "@/lib/shop-store";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,22 +35,51 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请填写店铺名称、联系电话和店铺简介" }, { status: 400 });
   }
 
+  const roleUpper = String(session.role || "").toUpperCase();
+  const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
   const statusInput = typeof body.status === "string" ? body.status.toLowerCase() : "pending";
-  const status = session.role === "ADMIN" ? statusInput : "pending";
+  const status = isAdmin ? statusInput : "pending";
   const authorId = session.id;
 
-  const item = await createShop({
-    name: String(body.name).trim(),
-    category: typeof body.category === "string" ? body.category.trim() : "food",
-    address: typeof body.address === "string" ? body.address.trim() : "杨林地区",
-    phone: String(body.phone).trim(),
-    hours: typeof body.hours === "string" ? body.hours.trim() : "09:00 - 21:00",
-    intro: String(body.intro).trim(),
-    logo: typeof body.logo === "string" ? body.logo.trim() : undefined,
-    status,
-    authorId,
-    images: Array.isArray(body.images) ? body.images : [],
+  const publishResult = await executePublishWithBillingGuard({
+    module: "shop",
+    action: "PUBLISH",
+    userId: authorId,
+    userRole: session.role,
+    entitlementId: body.entitlementId,
+    adminBypass: isAdmin,
+    createResource: async (tx) => {
+      return createShop(
+        {
+          name: String(body.name).trim(),
+          category: typeof body.category === "string" ? body.category.trim() : "food",
+          address: typeof body.address === "string" ? body.address.trim() : "杨林地区",
+          phone: String(body.phone).trim(),
+          hours: typeof body.hours === "string" ? body.hours.trim() : "09:00 - 21:00",
+          intro: String(body.intro).trim(),
+          logo: typeof body.logo === "string" ? body.logo.trim() : undefined,
+          status,
+          authorId,
+          images: Array.isArray(body.images) ? body.images : [],
+        },
+        tx
+      );
+    },
   });
+
+  if (!publishResult.success && publishResult.needPayment) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "NEED_PAYMENT",
+        error: publishResult.error,
+        quote: publishResult.quote,
+      },
+      { status: 402 }
+    );
+  }
+
+  const item = (publishResult as any).item;
 
   return NextResponse.json({ item }, { status: 201 });
 }

@@ -399,13 +399,14 @@ export async function createContent(input: {
   images?: string[];
   oldId?: string;
   companyId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
   const item =
     input.kind === "article"
-      ? await prisma.article.create({ data: { title: input.title, body: input.body, category: input.category || "life", status, authorId: input.authorId, images: input.images || [], oldId: input.oldId } })
+      ? await db.article.create({ data: { title: input.title, body: input.body, category: input.category || "life", status, authorId: input.authorId, images: input.images || [], oldId: input.oldId } })
       : input.kind === "job"
-        ? await prisma.job.create({
+        ? await db.job.create({
             data: {
               title: input.title,
               company: input.company || "",
@@ -424,7 +425,7 @@ export async function createContent(input: {
               oldId: input.oldId,
             },
           })
-        : await prisma.listing.create({
+        : await db.listing.create({
             data: {
               title: input.title,
               category: input.category || "二手闲置",
@@ -450,7 +451,7 @@ export async function createContent(input: {
             },
           });
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       action: `create_${input.kind}`,
       targetId: item.id,

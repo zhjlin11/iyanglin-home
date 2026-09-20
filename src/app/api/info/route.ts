@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getCategoryByKey, getCategoryByName } from "@/lib/info-categories";
 import { cleanText } from "@/lib/strip-html";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -282,46 +283,72 @@ export async function POST(request: Request) {
     const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
     const initialStatus = isAdmin ? "APPROVED" : "PENDING";
 
-    const listing = await prisma.listing.create({
-      data: {
-        title: cleanTitle,
-        category: normalizedCategory,
-        subCategory: subCategory ? cleanText(subCategory).trim() : null,
-        itemType: (itemType || "OFFER").toUpperCase(),
-        price: price ? cleanText(price).trim() : "面议",
-        priceNum: parsedPriceNum,
-        priceUnit: priceUnit || "元",
-        condition: condition ? cleanText(condition).trim() : null,
-        area: area ? cleanText(area).trim() : "杨林经开区",
-        address: address ? cleanText(address).trim() : null,
-        contact: cleanContact,
-        contactName: contactName ? cleanText(contactName).trim() : null,
-        wechat: wechat ? cleanText(wechat).trim() : null,
-        body: cleanContent,
-        images: Array.isArray(images) ? images.slice(0, 9) : [],
-        departureTime: departureTime ? cleanText(departureTime).trim() : null,
-        fromPlace: fromPlace ? cleanText(fromPlace).trim() : null,
-        toPlace: toPlace ? cleanText(toPlace).trim() : null,
-        status: initialStatus,
-        expiresAt,
-        extraData: extraData && typeof extraData === "object" ? extraData : {},
-        authorId: session.id,
-        refreshedAt: new Date(),
+    const publishResult = await executePublishWithBillingGuard({
+      module: "listing",
+      action: "PUBLISH",
+      userId: session.id,
+      userRole: session.role,
+      entitlementId: body.entitlementId,
+      adminBypass: isAdmin,
+      createResource: async (tx) => {
+        const listing = await tx.listing.create({
+          data: {
+            title: cleanTitle,
+            category: normalizedCategory,
+            subCategory: subCategory ? cleanText(subCategory).trim() : null,
+            itemType: (itemType || "OFFER").toUpperCase(),
+            price: price ? cleanText(price).trim() : "面议",
+            priceNum: parsedPriceNum,
+            priceUnit: priceUnit || "元",
+            condition: condition ? cleanText(condition).trim() : null,
+            area: area ? cleanText(area).trim() : "杨林经开区",
+            address: address ? cleanText(address).trim() : null,
+            contact: cleanContact,
+            contactName: contactName ? cleanText(contactName).trim() : null,
+            wechat: wechat ? cleanText(wechat).trim() : null,
+            body: cleanContent,
+            images: Array.isArray(images) ? images.slice(0, 9) : [],
+            departureTime: departureTime ? cleanText(departureTime).trim() : null,
+            fromPlace: fromPlace ? cleanText(fromPlace).trim() : null,
+            toPlace: toPlace ? cleanText(toPlace).trim() : null,
+            status: initialStatus,
+            expiresAt,
+            extraData: extraData && typeof extraData === "object" ? extraData : {},
+            authorId: session.id,
+            refreshedAt: new Date(),
+          },
+        });
+
+        await tx.operationLog.create({
+          data: {
+            action: "create_listing",
+            targetId: listing.id,
+            userId: session.id,
+            metadata: {
+              title: listing.title,
+              category: listing.category,
+              status: initialStatus,
+            },
+          },
+        });
+
+        return listing;
       },
     });
 
-    await prisma.operationLog.create({
-      data: {
-        action: "create_listing",
-        targetId: listing.id,
-        userId: session.id,
-        metadata: {
-          title: listing.title,
-          category: listing.category,
-          status: initialStatus,
+    if (!publishResult.success && publishResult.needPayment) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "NEED_PAYMENT",
+          error: publishResult.error,
+          quote: publishResult.quote,
         },
-      },
-    });
+        { status: 402 }
+      );
+    }
+
+    const listing = (publishResult as any).item;
 
     return NextResponse.json({
       success: true,

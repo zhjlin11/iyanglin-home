@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createHouse, listHouses, updateHouse } from "@/lib/house-store";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,23 +35,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请填写标题、联系方式和房源详情" }, { status: 400 });
   }
 
+  const roleUpper = String(session.role || "").toUpperCase();
+  const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
   const statusInput = typeof body.status === "string" ? body.status.toLowerCase() : "pending";
-  const status = session.role === "ADMIN" ? statusInput : "pending";
+  const status = isAdmin ? statusInput : "pending";
   const authorId = session.id;
 
-  const item = await createHouse({
-    title: String(body.title).trim(),
-    houseType: typeof body.houseType === "string" ? body.houseType.trim() : "rent",
-    price: typeof body.price === "string" ? body.price.trim() : "面议",
-    layout: typeof body.layout === "string" ? body.layout.trim() : "不限",
-    areaSize: typeof body.areaSize === "string" ? body.areaSize.trim() : "不限",
-    location: typeof body.location === "string" ? body.location.trim() : "杨林地区",
-    contact: String(body.contact).trim(),
-    body: String(body.body).trim(),
-    status,
-    authorId,
-    images: Array.isArray(body.images) ? body.images : [],
+  const publishResult = await executePublishWithBillingGuard({
+    module: "house",
+    action: "PUBLISH",
+    userId: authorId,
+    userRole: session.role,
+    entitlementId: body.entitlementId,
+    adminBypass: isAdmin,
+    createResource: async (tx) => {
+      return createHouse(
+        {
+          title: String(body.title).trim(),
+          houseType: typeof body.houseType === "string" ? body.houseType.trim() : "rent",
+          price: typeof body.price === "string" ? body.price.trim() : "面议",
+          layout: typeof body.layout === "string" ? body.layout.trim() : "不限",
+          areaSize: typeof body.areaSize === "string" ? body.areaSize.trim() : "不限",
+          location: typeof body.location === "string" ? body.location.trim() : "杨林地区",
+          contact: String(body.contact).trim(),
+          body: String(body.body).trim(),
+          status,
+          authorId,
+          images: Array.isArray(body.images) ? body.images : [],
+        },
+        tx
+      );
+    },
   });
+
+  if (!publishResult.success && publishResult.needPayment) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "NEED_PAYMENT",
+        error: publishResult.error,
+        quote: publishResult.quote,
+      },
+      { status: 402 }
+    );
+  }
+
+  const item = (publishResult as any).item;
 
   return NextResponse.json({ item }, { status: 201 });
 }

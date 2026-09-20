@@ -16,6 +16,7 @@ import {
   generateBillingQuote,
   consumeFreeQuota,
   consumeEntitlement,
+  executePublishWithBillingGuard,
 } from "@/lib/billing-guard";
 
 const statuses = ["draft", "pending", "approved", "offline"] as const;
@@ -103,90 +104,56 @@ export async function POST(request: Request) {
     }
 
     // =======================================================
-    // 强制商业化计费门禁 (BillingGuard Interception)
+    // 强制商业化计费门禁 (Transactional BillingGuard)
     // =======================================================
     const isAdmin = role === "ADMIN";
     const isDraft = body.status === "draft";
     const isBypassed = isDraft || (isAdmin && body.adminBypassBilling === true);
-    let entitlementToConsume: any = null;
-    let shouldConsumeFreeQuota = false;
-    const subjectType = (body.kind === "job" && finalCompanyId) ? "COMPANY" : "USER";
-    const subjectId = subjectType === "COMPANY" ? finalCompanyId! : authorId;
 
-    if (!isBypassed) {
-      if (body.entitlementId) {
-        // 用户已经预先支付，核验权益凭证
-        const ent = await prisma.billingEntitlement.findUnique({
-          where: { id: String(body.entitlementId).trim() },
-        });
-        if (!ent || ent.status !== "AVAILABLE" || ent.expiresAt < new Date() || ent.userId !== authorId) {
-          return NextResponse.json({ error: "支付权益凭证无效、已使用或已过期，请重新支付" }, { status: 400 });
-        }
-        entitlementToConsume = ent;
-      } else {
-        // 未提供权益凭证，服务端即时报价并检查免费额度
-        const quote = await generateBillingQuote({
-          module: body.kind,
-          action: "PUBLISH",
-          subjectType,
-          subjectId,
-          userId: authorId,
-        });
-
-        if (quote.isFree) {
-          if (quote.freeReason === "FREE_QUOTA") {
-            shouldConsumeFreeQuota = true;
-          }
-        } else {
-          // 免费额度已用尽且未支付 -> 强制阻断，返回 HTTP 402
-          return NextResponse.json(
-            {
-              code: "NEED_PAYMENT",
-              error: `免费发布额度已用完，需支付后发布 (${quote.priceRmbDisplay} / ${quote.priceCoinsDisplay})`,
-              quote,
-            },
-            { status: 402 }
-          );
-        }
-      }
-    }
-
-    const item = await createContent({
-      kind: body.kind,
-      title: body.title.trim(),
-      company: typeof body.company === "string" ? body.company.trim() : undefined,
+    const publishResult = await executePublishWithBillingGuard({
+      module: body.kind,
+      action: "PUBLISH",
+      userId: authorId,
+      userRole: role,
       companyId: finalCompanyId,
-      category: typeof body.category === "string" ? body.category.trim() : undefined,
-      contact: typeof body.contact === "string" ? body.contact.trim() : undefined,
-      contactName: typeof body.contactName === "string" ? body.contactName.trim() : undefined,
-      address: typeof body.address === "string" ? body.address.trim() : undefined,
-      body: body.body.trim(),
-      status: body.status === "draft" ? "draft" : "pending",
-      jobType: typeof body.jobType === "string" ? body.jobType.trim() : undefined,
-      area: typeof body.area === "string" ? body.area.trim() : undefined,
-      salary: typeof body.salary === "string" ? body.salary.trim() : undefined,
-      authorId: authorId || undefined,
-      images: Array.isArray(body.images) ? body.images : [],
+      entitlementId: body.entitlementId,
+      adminBypass: isBypassed,
+      createResource: async (tx) => {
+        return createContent(
+          {
+            kind: body.kind,
+            title: body.title.trim(),
+            company: typeof body.company === "string" ? body.company.trim() : undefined,
+            companyId: finalCompanyId,
+            category: typeof body.category === "string" ? body.category.trim() : undefined,
+            contact: typeof body.contact === "string" ? body.contact.trim() : undefined,
+            contactName: typeof body.contactName === "string" ? body.contactName.trim() : undefined,
+            address: typeof body.address === "string" ? body.address.trim() : undefined,
+            body: body.body.trim(),
+            status: body.status === "draft" ? "draft" : "pending",
+            jobType: typeof body.jobType === "string" ? body.jobType.trim() : undefined,
+            area: typeof body.area === "string" ? body.area.trim() : undefined,
+            salary: typeof body.salary === "string" ? body.salary.trim() : undefined,
+            authorId: authorId || undefined,
+            images: Array.isArray(body.images) ? body.images : [],
+          },
+          tx
+        );
+      },
     });
 
-    // 核销权益凭证或扣减免费额度
-    if (entitlementToConsume) {
-      await consumeEntitlement({
-        entitlementId: entitlementToConsume.id,
-        userId: authorId,
-        resourceId: item.id,
-        module: item.kind,
-      }).catch((e) => console.error("消费权益凭证失败:", e));
-    } else if (shouldConsumeFreeQuota) {
-      await consumeFreeQuota({
-        module: item.kind,
-        action: "PUBLISH",
-        subjectType,
-        subjectId,
-        userId: authorId,
-        resourceId: item.id,
-      }).catch((e) => console.error("消费免费额度记录失败:", e));
+    if (!publishResult.success && publishResult.needPayment) {
+      return NextResponse.json(
+        {
+          code: "NEED_PAYMENT",
+          error: publishResult.error,
+          quote: publishResult.quote,
+        },
+        { status: 402 }
+      );
     }
+
+    const item = (publishResult as any).item;
 
     let order = null;
     if (body.billingPlanId) {

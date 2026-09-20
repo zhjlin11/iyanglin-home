@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 // GET /api/industrial - 列表检索与分页
 export async function GET(request: Request) {
@@ -191,78 +192,106 @@ export async function POST(request: Request) {
       );
     }
 
-    const newProperty = await prisma.industrialProperty.create({
-      data: {
-        userId: session.id === "env-admin" ? null : session.id,
-        title: data.title.trim(),
-        description: data.description ? data.description.trim() : "",
-        propertyType: data.propertyType || "FACTORY",
-        transactionType: data.transactionType || "RENT",
-        status: "PUBLISHED", // 默认直接发布上线，后台可流转审核
+    const roleUpper = String(session.role || "").toUpperCase();
+    const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
+    const status = isAdmin ? (data.status || "PUBLISHED") : "PENDING";
 
-        region: data.region || "杨林经开区",
-        parkName: data.parkName ? data.parkName.trim() : null,
-        address: data.address.trim(),
+    const publishResult = await executePublishWithBillingGuard({
+      module: "industrial",
+      action: "PUBLISH",
+      userId: session.id,
+      userRole: session.role,
+      entitlementId: data.entitlementId,
+      adminBypass: isAdmin,
+      createResource: async (tx) => {
+        return tx.industrialProperty.create({
+          data: {
+            userId: session.id === "env-admin" ? null : session.id,
+            title: data.title.trim(),
+            description: data.description ? data.description.trim() : "",
+            propertyType: data.propertyType || "FACTORY",
+            transactionType: data.transactionType || "RENT",
+            status,
 
-        buildingArea: parseNum(data.buildingArea),
-        factoryArea: parseNum(data.factoryArea),
-        landArea: parseNum(data.landArea),
-        officeArea: parseNum(data.officeArea),
+            region: data.region || "杨林经开区",
+            parkName: data.parkName ? data.parkName.trim() : null,
+            address: data.address.trim(),
 
-        rentPrice: parseNum(data.rentPrice),
-        salePrice: parseNum(data.salePrice),
-        priceUnit: data.priceUnit || "元/㎡/月",
-        negotiable: !!data.negotiable,
+            buildingArea: parseNum(data.buildingArea),
+            factoryArea: parseNum(data.factoryArea),
+            landArea: parseNum(data.landArea),
+            officeArea: parseNum(data.officeArea),
 
-        floorHeight: parseNum(data.floorHeight),
-        floorCount: parsePositiveInt(data.floorCount) || 1,
-        isSingleFloor: data.isSingleFloor !== undefined ? !!data.isSingleFloor : true,
-        loadBearing: parseNum(data.loadBearing),
-        columnSpacing: data.columnSpacing ? data.columnSpacing.trim() : null,
-        powerCapacity: parsePositiveInt(data.powerCapacity),
-        hasCrane: !!data.hasCrane,
-        craneTonnage: parseNum(data.craneTonnage),
+            rentPrice: parseNum(data.rentPrice),
+            salePrice: parseNum(data.salePrice),
+            priceUnit: data.priceUnit || "元/㎡/月",
+            negotiable: !!data.negotiable,
 
-        hasGas: !!data.hasGas,
-        hasWater: data.hasWater !== undefined ? !!data.hasWater : true,
-        hasDrainage: data.hasDrainage !== undefined ? !!data.hasDrainage : true,
-        hasFireSystem: data.hasFireSystem !== undefined ? !!data.hasFireSystem : true,
-        fireStatus: data.fireStatus || "丙类",
-        hasEnvironmentalCondition: !!data.hasEnvironmentalCondition,
+            floorHeight: parseNum(data.floorHeight),
+            floorCount: parsePositiveInt(data.floorCount) || 1,
+            isSingleFloor: data.isSingleFloor !== undefined ? !!data.isSingleFloor : true,
+            loadBearing: parseNum(data.loadBearing),
+            columnSpacing: data.columnSpacing ? data.columnSpacing.trim() : null,
+            powerCapacity: parsePositiveInt(data.powerCapacity),
+            hasCrane: !!data.hasCrane,
+            craneTonnage: parseNum(data.craneTonnage),
 
-        truckAccessible: data.truckAccessible !== undefined ? !!data.truckAccessible : true,
-        maxTruckLength: data.maxTruckLength || "17.5米",
-        roadWidth: parseNum(data.roadWidth),
-        hasLoadingDock: !!data.hasLoadingDock,
+            hasGas: !!data.hasGas,
+            hasWater: data.hasWater !== undefined ? !!data.hasWater : true,
+            hasDrainage: data.hasDrainage !== undefined ? !!data.hasDrainage : true,
+            hasFireSystem: data.hasFireSystem !== undefined ? !!data.hasFireSystem : true,
+            fireStatus: data.fireStatus || "丙类",
+            hasEnvironmentalCondition: !!data.hasEnvironmentalCondition,
 
-        hasOffice: !!data.hasOffice,
-        hasDormitory: !!data.hasDormitory,
-        hasCanteen: !!data.hasCanteen,
-        hasParking: data.hasParking !== undefined ? !!data.hasParking : true,
-        parkingCount: parsePositiveInt(data.parkingCount),
+            truckAccessible: data.truckAccessible !== undefined ? !!data.truckAccessible : true,
+            maxTruckLength: data.maxTruckLength || "17.5米",
+            roadWidth: parseNum(data.roadWidth),
+            hasLoadingDock: !!data.hasLoadingDock,
 
-        landUseType: data.landUseType || null,
-        propertyRightStatus: data.propertyRightStatus || null,
-        canSplit: !!data.canSplit,
-        canBuild: data.canBuild !== undefined ? !!data.canBuild : true,
+            hasOffice: !!data.hasOffice,
+            hasDormitory: !!data.hasDormitory,
+            hasCanteen: !!data.hasCanteen,
+            hasParking: data.hasParking !== undefined ? !!data.hasParking : true,
+            parkingCount: parsePositiveInt(data.parkingCount),
 
-        cooperationDemand: data.cooperationDemand ? data.cooperationDemand.trim() : null,
-        minimumLeaseTerm: data.minimumLeaseTerm || "1年",
-        availableDate: data.availableDate || "随时可进驻",
-        suitableIndustries: Array.isArray(data.suitableIndustries) ? data.suitableIndustries : [],
+            landUseType: data.landUseType || null,
+            propertyRightStatus: data.propertyRightStatus || null,
+            canSplit: !!data.canSplit,
+            canBuild: data.canBuild !== undefined ? !!data.canBuild : true,
 
-        contactName: data.contactName.trim(),
-        contactPhone: data.contactPhone.trim(),
-        verifiedLevel: "NONE",
+            cooperationDemand: data.cooperationDemand ? data.cooperationDemand.trim() : null,
+            minimumLeaseTerm: data.minimumLeaseTerm || "1年",
+            availableDate: data.availableDate || "随时可进驻",
+            suitableIndustries: Array.isArray(data.suitableIndustries) ? data.suitableIndustries : [],
 
-        images: Array.isArray(data.images) ? data.images : [],
+            contactName: data.contactName.trim(),
+            contactPhone: data.contactPhone.trim(),
+            verifiedLevel: "NONE",
+
+            images: Array.isArray(data.images) ? data.images : [],
+          },
+        });
       },
     });
+
+    if (!publishResult.success && publishResult.needPayment) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "NEED_PAYMENT",
+          error: publishResult.error,
+          quote: publishResult.quote,
+        },
+        { status: 402 }
+      );
+    }
+
+    const newProperty = (publishResult as any).item;
 
     return NextResponse.json({
       success: true,
       id: newProperty.id,
-      message: "发布成功",
+      message: status === "PENDING" ? "提交成功，已进入审核队列" : "发布成功",
     });
   } catch (error: any) {
     console.error("POST /api/industrial error:", error);

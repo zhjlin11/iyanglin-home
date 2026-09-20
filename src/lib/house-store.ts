@@ -100,9 +100,10 @@ export async function createHouse(input: {
   authorId?: string;
   images?: string[];
   oldId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
-  const item = await prisma.house.create({
+  const item = await db.house.create({
     data: {
       title: input.title,
       houseType: input.houseType || "rent",
@@ -119,7 +120,7 @@ export async function createHouse(input: {
     },
   });
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       userId: input.authorId,
       action: `CREATE_HOUSE_${status}`,

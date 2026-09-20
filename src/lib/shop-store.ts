@@ -81,9 +81,10 @@ export async function createShop(input: {
   status: string;
   authorId?: string;
   oldId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
-  const item = await prisma.shop.create({
+  const item = await db.shop.create({
     data: {
       name: input.name,
       category: input.category || "food",
@@ -99,7 +100,7 @@ export async function createShop(input: {
     },
   });
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       userId: input.authorId,
       action: `CREATE_SHOP_${status}`,

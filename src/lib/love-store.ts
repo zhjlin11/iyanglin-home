@@ -128,9 +128,10 @@ export async function createDatingProfile(input: {
   authorId?: string;
   photos?: string[];
   oldId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
-  const item = await prisma.datingProfile.create({
+  const item = await db.datingProfile.create({
     data: {
       gender: input.gender || "female",
       nickname: input.nickname,
@@ -151,7 +152,7 @@ export async function createDatingProfile(input: {
     },
   });
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       userId: input.authorId,
       action: `CREATE_DATING_PROFILE_${status}`,

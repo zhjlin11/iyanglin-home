@@ -289,9 +289,10 @@ export async function createPost(input: {
   images?: string[];
   topics?: string[];
   oldId?: string;
-}) {
+}, tx?: any) {
+  const db = tx || prisma;
   const status = statusValue(input.status);
-  const item = await prisma.post.create({
+  const item = await db.post.create({
     data: {
       title: input.title,
       board: input.board || "yanglin",
@@ -319,7 +320,7 @@ export async function createPost(input: {
 
   if (input.topics && input.topics.length > 0) {
     for (const slug of input.topics) {
-      await prisma.topic.upsert({
+      await db.topic.upsert({
         where: { slug },
         create: {
           slug,
@@ -333,7 +334,7 @@ export async function createPost(input: {
     }
   }
 
-  await prisma.operationLog.create({
+  await db.operationLog.create({
     data: {
       userId: input.authorId,
       action: `CREATE_POST_${status}`,

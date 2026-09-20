@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createEvent, listEvents, updateEvent } from "@/lib/event-store";
+import { executePublishWithBillingGuard } from "@/lib/billing-guard";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,23 +35,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "活动标题、时间、地点、联系方式及行程说明不能为空" }, { status: 400 });
   }
 
+  const roleUpper = String(session.role || "").toUpperCase();
+  const isAdmin = roleUpper === "ADMIN" || roleUpper === "EDITOR";
   const statusInput = typeof body.status === "string" ? body.status.toLowerCase() : "pending";
-  const status = session.role === "ADMIN" ? statusInput : "pending";
+  const status = isAdmin ? statusInput : "pending";
   const authorId = session.id;
 
-  const item = await createEvent({
-    title: String(body.title).trim(),
-    category: typeof body.category === "string" ? body.category.trim() : "party",
-    eventTime: String(body.eventTime).trim(),
-    location: String(body.location).trim(),
-    fee: typeof body.fee === "string" && body.fee.trim() ? body.fee.trim() : "免费",
-    quota: typeof body.quota === "string" && body.quota.trim() ? body.quota.trim() : "不限",
-    contact: String(body.contact).trim(),
-    intro: String(body.intro).trim(),
-    status,
-    authorId,
-    images: Array.isArray(body.images) ? body.images : [],
+  const publishResult = await executePublishWithBillingGuard({
+    module: "event",
+    action: "PUBLISH",
+    userId: authorId,
+    userRole: session.role,
+    entitlementId: body.entitlementId,
+    adminBypass: isAdmin,
+    createResource: async (tx) => {
+      return createEvent(
+        {
+          title: String(body.title).trim(),
+          category: typeof body.category === "string" ? body.category.trim() : "party",
+          eventTime: String(body.eventTime).trim(),
+          location: String(body.location).trim(),
+          fee: typeof body.fee === "string" && body.fee.trim() ? body.fee.trim() : "免费",
+          quota: typeof body.quota === "string" && body.quota.trim() ? body.quota.trim() : "不限",
+          contact: String(body.contact).trim(),
+          intro: String(body.intro).trim(),
+          status,
+          authorId,
+          images: Array.isArray(body.images) ? body.images : [],
+        },
+        tx
+      );
+    },
   });
+
+  if (!publishResult.success && publishResult.needPayment) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "NEED_PAYMENT",
+        error: publishResult.error,
+        quote: publishResult.quote,
+      },
+      { status: 402 }
+    );
+  }
+
+  const item = (publishResult as any).item;
 
   return NextResponse.json({ item }, { status: 201 });
 }
