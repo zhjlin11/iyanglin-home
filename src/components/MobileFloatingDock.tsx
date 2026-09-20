@@ -231,9 +231,8 @@ export default function MobileFloatingDock() {
                   height: "100%",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setShowPublishSheet(true)}
+                <Link
+                  href="/publish"
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -249,8 +248,9 @@ export default function MobileFloatingDock() {
                     width: "64px",
                     height: "64px",
                     zIndex: 52,
+                    textDecoration: "none",
                   }}
-                  aria-label="一键免费发布信息"
+                  aria-label="发布中心"
                 >
                   <div
                     style={{
@@ -273,14 +273,14 @@ export default function MobileFloatingDock() {
                     style={{
                       fontSize: "11px",
                       fontWeight: "800",
-                      color: "#0B7A75",
+                      color: pathname === "/publish" ? "#EA580C" : "#0B7A75",
                       marginTop: "2px",
                       letterSpacing: "0.2px",
                     }}
                   >
                     {item.label}
                   </span>
-                </button>
+                </Link>
               </div>
             );
           }
