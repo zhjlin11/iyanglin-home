@@ -8,6 +8,9 @@ import CommunityPostActions from "@/components/CommunityPostActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
+import { getSession } from "@/lib/auth";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -54,23 +57,25 @@ export default async function PostDetailPage({ params }: PageProps) {
   const { id } = await params;
   const post = await getPost(id);
 
-  if (!post || (post.status !== "approved" && post.status !== "active")) {
+  if (!post) {
+    notFound();
+  }
+
+  const session = await getSession();
+  const access = canViewResource({
+    status: post.status,
+    authorId: post.authorId,
+    currentUser: session,
+  });
+
+  if (!access.canView) {
     return (
-      <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-        <Navbar />
-        <div style={{ maxWidth: "600px", margin: "4rem auto", textAlign: "center", background: "white", padding: "3rem", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
-          <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
-          <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", marginBottom: "8px" }}>
-            该贴子不存在或正在审核中
-          </h2>
-          <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "1.5rem" }}>
-            该内容可能已被作者删除或已移至归档。
-          </p>
-          <Link href="/community" style={{ color: "#0f766e", fontWeight: "700", textDecoration: "none" }}>
-            ← 返回社区论坛首页
-          </Link>
-        </div>
-      </div>
+      <VisitorPendingCard
+        moduleName="社区贴子"
+        channelUrl="/community"
+        channelName="社区论坛"
+        status={access.normalizedStatus}
+      />
     );
   }
 
@@ -90,6 +95,20 @@ export default async function PostDetailPage({ params }: PageProps) {
       {/* 微信与社交分享爬虫首图兜底 */}
       <WechatShareHiddenImage imageUrl={communityShareImg} alt={communityShareTitle} />
       <Navbar />
+      {access.normalizedStatus !== "APPROVED" && (
+        <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1rem" }}>
+          <ReviewStatusBanner
+            status={access.normalizedStatus}
+            moduleName="社区贴子"
+            channelUrl="/community"
+            channelName="社区论坛"
+            isOwner={access.isOwner}
+            isAdmin={access.isAdmin}
+            createdAt={post.createdAt}
+            adminReviewUrl="/admin/community"
+          />
+        </div>
+      )}
 
       {/* 面包屑导航 */}
       <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "12px 1rem" }}>

@@ -10,6 +10,8 @@ import { parseDatingContact } from "@/lib/dating-contact-utils";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import type { Metadata, ResolvingMetadata } from "next";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -63,14 +65,31 @@ export default async function DatingDetailPage({ params }: PageProps) {
   const { id } = await params;
   const profile = await getDatingProfile(id);
 
-  if (!profile || profile.status !== "approved") {
+  if (!profile) {
     notFound();
   }
 
   const session = await getSession();
+  const access = canViewResource({
+    status: profile.status,
+    authorId: profile.authorId,
+    currentUser: session,
+  });
+
+  if (!access.canView) {
+    return (
+      <VisitorPendingCard
+        moduleName="相亲交友资料"
+        channelUrl="/love"
+        channelName="相亲交友专区"
+        status={access.normalizedStatus}
+      />
+    );
+  }
+
   const isLoggedIn = !!session?.id;
-  const isAdmin = session?.role === "ADMIN";
-  const isOwner = !!(session?.id && profile.authorId === session.id);
+  const isAdmin = access.isAdmin;
+  const isOwner = access.isOwner;
 
   let hasPaidUnlock = false;
   if (session?.id && !isAdmin && !isOwner) {
@@ -124,6 +143,20 @@ export default async function DatingDetailPage({ params }: PageProps) {
       {/* 微信与社交分享爬虫首图兜底 */}
       <WechatShareHiddenImage imageUrl={loveShareImg} alt={loveShareTitle} />
       <Navbar />
+
+      {/* 待审核或非公开提示条 */}
+      {access.normalizedStatus !== "APPROVED" && (
+        <ReviewStatusBanner
+          status={access.normalizedStatus}
+          moduleName="相亲交友资料"
+          channelUrl="/love"
+          channelName="相亲交友"
+          isOwner={access.isOwner}
+          isAdmin={access.isAdmin}
+          createdAt={profile.createdAt}
+          adminReviewUrl="/admin/dating"
+        />
+      )}
 
       {/* 顶部面包屑与轻奢导航栏 */}
       <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "12px 1rem" }}>

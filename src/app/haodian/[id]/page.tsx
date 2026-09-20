@@ -9,6 +9,9 @@ import Link from "next/link";
 import { cleanText } from "@/lib/strip-html";
 import { getImageUrl, CATEGORY_FALLBACK_STYLES } from "@/lib/image-url";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
+import { getSession } from "@/lib/auth";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -71,8 +74,26 @@ export default async function MallDetailPage({ params }: PageProps) {
   const { id } = await params;
   const shop = await getShop(id);
 
-  if (!shop || shop.status !== "approved") {
+  if (!shop) {
     notFound();
+  }
+
+  const session = await getSession();
+  const access = canViewResource({
+    status: shop.status,
+    authorId: shop.authorId,
+    currentUser: session,
+  });
+
+  if (!access.canView) {
+    return (
+      <VisitorPendingCard
+        moduleName="商家好店资料"
+        channelUrl="/haodian"
+        channelName="好店名录"
+        status={access.normalizedStatus}
+      />
+    );
   }
 
   const parsed = parseShopBody(shop.intro);
@@ -104,6 +125,22 @@ export default async function MallDetailPage({ params }: PageProps) {
       {/* 微信与社交分享爬虫首图兜底 */}
       <WechatShareHiddenImage imageUrl={shopShareImg} alt={shopShareTitle} />
       <Navbar />
+
+      {/* 待审核或非公开提示条 */}
+      {access.normalizedStatus !== "APPROVED" && (
+        <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "0 1rem" }}>
+          <ReviewStatusBanner
+            status={access.normalizedStatus}
+            moduleName="商家好店资料"
+            channelUrl="/haodian"
+            channelName="好店名录"
+            isOwner={access.isOwner}
+            isAdmin={access.isAdmin}
+            createdAt={shop.createdAt}
+            adminReviewUrl="/admin/shops"
+          />
+        </div>
+      )}
 
       {/* =========================================================================
           1. 顶部电商面包屑导航 (Ekka Breadcrumb)

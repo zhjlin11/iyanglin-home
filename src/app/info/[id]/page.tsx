@@ -8,6 +8,8 @@ import ContactRevealer from "@/components/ContactRevealer";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
 import InfoStickyContactBar from "@/components/info/InfoStickyContactBar";
 import { getSession } from "@/lib/auth";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 import { CONTACT_VIEW_COIN_COST } from "@/lib/coin-wallet-store";
 import { Metadata } from "next";
 import InfoDetailPromoteButton from "@/components/info/InfoDetailPromoteButton";
@@ -128,8 +130,14 @@ export default async function InfoDetailPage({ params }: PageProps) {
   if (!item) notFound();
 
   const session = await getSession();
-  const isAuthor = session?.id === item.authorId;
-  const isAdmin = session?.role === "ADMIN" || session?.role === "admin" || session?.role === "editor";
+  const access = canViewResource({
+    status: item.status,
+    authorId: item.authorId,
+    currentUser: session,
+  });
+
+  const isAuthor = access.isOwner;
+  const isAdmin = access.isAdmin;
 
   // 状态访问控制
   const isApproved = item.status === "APPROVED";
@@ -142,9 +150,16 @@ export default async function InfoDetailPage({ params }: PageProps) {
     item.status === "EXPIRED" ||
     (item.expiresAt && new Date(item.expiresAt) < new Date());
 
-  // 如果非公开状态且不是作者或管理员，则禁止访问
-  if (!isApproved && !isSold && !isResolved && !isExpired && !isAuthor && !isAdmin) {
-    notFound();
+  // 如果非公开状态且不能预览，则展示友好未公开/待审核页面
+  if (!access.canView && !isSold && !isResolved && !isExpired) {
+    return (
+      <VisitorPendingCard
+        moduleName="分类便民信息"
+        channelUrl="/info"
+        channelName="分类便民频道"
+        status={access.normalizedStatus}
+      />
+    );
   }
 
   // 浏览量自增
@@ -249,6 +264,20 @@ export default async function InfoDetailPage({ params }: PageProps) {
     >
       <WechatShareHiddenImage imageUrl={productShareImg} alt={productShareTitle} />
       <Navbar />
+      {access.normalizedStatus !== "APPROVED" && (
+        <div style={{ maxWidth: "840px", margin: "0 auto", padding: "0 1rem" }}>
+          <ReviewStatusBanner
+            status={access.normalizedStatus}
+            moduleName="分类便民信息"
+            channelUrl="/info"
+            channelName="分类便民"
+            isOwner={access.isOwner}
+            isAdmin={access.isAdmin}
+            createdAt={item.createdAt}
+            adminReviewUrl="/admin/content?kind=listing"
+          />
+        </div>
+      )}
 
       {/* 顶部面包屑与标题区 */}
       <section

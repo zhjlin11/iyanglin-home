@@ -9,6 +9,8 @@ import { getSession } from "@/lib/auth";
 import DetailActions from "@/components/DetailActions";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
 import CrossChannelRecommendations from "@/components/common/CrossChannelRecommendations";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -74,8 +76,25 @@ export default async function IndustrialDetailPage({ params }: PageProps) {
     },
   });
 
-  if (!item || (item.status !== "PUBLISHED" && session?.role !== "ADMIN")) {
+  if (!item) {
     return notFound();
+  }
+
+  const access = canViewResource({
+    status: item.status,
+    authorId: item.userId,
+    currentUser: session,
+  });
+
+  if (!access.canView) {
+    return (
+      <VisitorPendingCard
+        moduleName="园区招商信息"
+        channelUrl="/industrial"
+        channelName="园区招商频道"
+        status={access.normalizedStatus}
+      />
+    );
   }
 
   // 浏览量轻量防刷递增
@@ -148,6 +167,20 @@ export default async function IndustrialDetailPage({ params }: PageProps) {
       {/* 微信与社交分享爬虫首图兜底 */}
       <WechatShareHiddenImage imageUrl={industrialShareImg} alt={industrialShareTitle} />
       <Navbar />
+
+      {/* 待审核或非公开提示条 */}
+      {access.normalizedStatus !== "APPROVED" && (
+        <ReviewStatusBanner
+          status={access.normalizedStatus}
+          moduleName="园区招商信息"
+          channelUrl="/industrial"
+          channelName="园区招商"
+          isOwner={access.isOwner}
+          isAdmin={access.isAdmin}
+          createdAt={item.createdAt}
+          adminReviewUrl="/admin/industrial"
+        />
+      )}
 
       {/* 面包屑导航 */}
       <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "14px 1.25rem", fontSize: "13px", color: "#64748B" }}>

@@ -12,6 +12,9 @@ import EventSignupSection from "@/components/EventSignupSection";
 import EventGallery from "@/components/EventGallery";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
 import type { Metadata, ResolvingMetadata } from "next";
+import { getSession } from "@/lib/auth";
+import { canViewResource } from "@/lib/resource-access";
+import ReviewStatusBanner, { VisitorPendingCard } from "@/components/common/ReviewStatusBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -76,8 +79,26 @@ export default async function EventDetailPage({ params }: PageProps) {
   const { id } = await params;
   const ev = await getEvent(id);
 
-  if (!ev || ev.status !== "approved") {
+  if (!ev) {
     notFound();
+  }
+
+  const session = await getSession();
+  const access = canViewResource({
+    status: ev.status,
+    authorId: ev.authorId,
+    currentUser: session,
+  });
+
+  if (!access.canView) {
+    return (
+      <VisitorPendingCard
+        moduleName="同城活动"
+        channelUrl="/active"
+        channelName="同城活动专区"
+        status={access.normalizedStatus}
+      />
+    );
   }
 
   const parsed = parseActivityBody(ev.intro);
@@ -137,6 +158,22 @@ export default async function EventDetailPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <Navbar />
+
+      {/* 待审核或非公开提示条 */}
+      {access.normalizedStatus !== "APPROVED" && (
+        <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "0 1.25rem" }}>
+          <ReviewStatusBanner
+            status={access.normalizedStatus}
+            moduleName="同城活动"
+            channelUrl="/active"
+            channelName="同城活动"
+            isOwner={access.isOwner}
+            isAdmin={access.isAdmin}
+            createdAt={ev.createdAt}
+            adminReviewUrl="/admin/content?kind=event"
+          />
+        </div>
+      )}
 
       <div className="shell content-shell" style={{ marginTop: "1.5rem", paddingBottom: "4rem", width: "100%", maxWidth: "1240px", boxSizing: "border-box" }}>
         
