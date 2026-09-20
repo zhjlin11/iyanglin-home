@@ -137,58 +137,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // 4. 模拟/测试支付 (管理员或本地测试快速核销)
+  // 4. 模拟/测试支付通道 — 生产环境严格禁用，杜绝资金绕过
   if (payMethod === "MOCK_PAY") {
-    const orderNo = `SIM${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
-    const order = await prisma.billingOrder.create({
-      data: {
-        orderNo,
-        planName: `模拟支付-${quote.module}`,
-        targetKind: quote.module,
-        targetId: quote.id,
-        targetTitle: `模拟支付-${quote.module}`,
-        amountCents: quote.priceRmbCents,
-        assetType: "RMB",
-        amountRmbCents: quote.priceRmbCents,
-        quoteId: quote.id,
-        paymentChannel: "MOCK_PAY",
-        status: "PAID",
-        paidAt: new Date(),
-        userId: session.id,
-        organizationId: quote.companyId || quote.organizationId,
-      },
-    });
-
-    const entitlement = await prisma.billingEntitlement.create({
-      data: {
-        userId: session.id,
-        companyId: quote.companyId,
-        module: quote.module,
-        action: quote.action,
-        assetType: "RMB",
-        sourceOrderId: order.id,
-        quoteId: quote.id,
-        status: "AVAILABLE",
-        expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
-      },
-    });
-
-    await prisma.billingQuote.update({
-      where: { id: quote.id },
-      data: { status: "PAID" },
-    });
-
-    await prisma.billingOrder.update({
-      where: { id: order.id },
-      data: { entitlementId: entitlement.id },
-    });
-
-    return NextResponse.json({
-      success: true,
-      payMethod: "MOCK_PAY",
-      entitlementId: entitlement.id,
-      orderNo,
-    });
+    return NextResponse.json(
+      { error: "安全审计拦截：系统已永久禁用模拟支付通道，请使用微信真实支付、金币或积分支付" },
+      { status: 403 }
+    );
   }
 
   return NextResponse.json({ error: "不支持的支付方式" }, { status: 400 });

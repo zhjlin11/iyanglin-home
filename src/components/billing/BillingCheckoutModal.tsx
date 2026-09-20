@@ -85,7 +85,7 @@ export default function BillingCheckoutModal({
   const canUsePoint = quote.allowPoint && balances.points >= quote.pricePoints;
 
   // 执行支付
-  const handlePay = async (method: "RMB" | "COIN" | "POINT" | "MOCK") => {
+  const handlePay = async (method: "RMB" | "COIN" | "POINT") => {
     if (!quote.id) {
       setErrorMsg("报价单失效，请刷新页面重新提交");
       return;
@@ -95,19 +95,6 @@ export default function BillingCheckoutModal({
     setErrorMsg("");
 
     try {
-      if (method === "MOCK") {
-        const res = await fetch("/api/billing/pay-quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quoteId: quote.id, payMethod: "MOCK_PAY" }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "模拟支付失败");
-        }
-        onSuccess(data.entitlementId);
-        return;
-      }
 
       if (method === "COIN") {
         const res = await fetch("/api/billing/pay-quote", {
@@ -294,26 +281,6 @@ export default function BillingCheckoutModal({
               </div>
               <div style={{ fontSize: "12px", color: "#64748B", marginBottom: "16px" }}>
                 打开手机微信扫一扫，支付成功后系统将自动完成发布
-              </div>
-
-              {/* 极速测试/管理员快速核销通道 */}
-              <div style={{ borderTop: "1px dashed #E2E8F0", paddingTop: "12px", marginTop: "12px" }}>
-                <button
-                  onClick={() => handlePay("MOCK")}
-                  disabled={loading}
-                  style={{
-                    background: "#F1F5F9",
-                    border: "1px solid #CBD5E1",
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                    color: "#475569",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                  }}
-                >
-                  ⚡ 测试环境极速核销 (跳过真实微信扣款)
-                </button>
               </div>
             </div>
           ) : (
