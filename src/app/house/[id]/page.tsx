@@ -67,12 +67,15 @@ export default async function HouseDetailPage({ params }: PageProps) {
   const { id } = await params;
   const house = await getHouse(id);
 
-  if (!house || house.status !== "approved") {
-    notFound();
-  }
-
   const session = await getSession();
   const isLoggedIn = !!session?.id;
+  const isAuthor = Boolean(session?.id && house?.authorId && session.id === house.authorId);
+  const isAdmin = session?.role === "ADMIN" || session?.role === "EDITOR";
+  const canPreview = isAuthor || isAdmin;
+
+  if (!house || (house.status !== "approved" && !canPreview)) {
+    notFound();
+  }
 
   // 检查当前用户是否已购买过该房源联系方式
   let contactUnlocked = false;
@@ -81,8 +84,8 @@ export default async function HouseDetailPage({ params }: PageProps) {
       where: { userId_targetKind_targetId: { userId: session.id, targetKind: "house", targetId: id } },
     });
     if (purchase) contactUnlocked = true;
-    // 管理员 / VIP 也免费
-    if (!contactUnlocked && session.role === "ADMIN") contactUnlocked = true;
+    // 管理员 / VIP / 作者本人免费
+    if (!contactUnlocked && (isAdmin || isAuthor)) contactUnlocked = true;
     if (!contactUnlocked) {
       const vip = await prisma.userMembership.findFirst({ where: { userId: session.id, status: "ACTIVE" } });
       if (vip) contactUnlocked = true;
@@ -138,6 +141,61 @@ export default async function HouseDetailPage({ params }: PageProps) {
           
           {/* 左侧主体内容 */}
           <div>
+            {/* 审核中 / 状态异常提示条（仅作者或管理员可见） */}
+            {house.status !== "approved" && (
+              <div
+                style={{
+                  background:
+                    house.status === "pending"
+                      ? "#FFFBEB"
+                      : house.status === "offline"
+                      ? "#F3F4F6"
+                      : "#FEF2F2",
+                  border:
+                    house.status === "pending"
+                      ? "1px solid #FCD34D"
+                      : house.status === "offline"
+                      ? "1px solid #D1D5DB"
+                      : "1px solid #FCA5A5",
+                  color:
+                    house.status === "pending"
+                      ? "#92400E"
+                      : house.status === "offline"
+                      ? "#374151"
+                      : "#991B1B",
+                  borderRadius: "12px",
+                  padding: "14px 18px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                }}
+              >
+                <span style={{ fontSize: "20px" }}>
+                  {house.status === "pending" ? "⏳" : house.status === "offline" ? "📦" : "❌"}
+                </span>
+                <div>
+                  {house.status === "pending" && (
+                    <>
+                      <strong>房源审核中：</strong> 该房源正在平台人工审核排队中（仅发布者本人与管理员可见）。审核通过后将自动对全站租客/买家公开展示。
+                    </>
+                  )}
+                  {house.status === "offline" && (
+                    <>
+                      <strong>房源已下架：</strong> 该房源当前处于下架状态（仅发布者本人与管理员可见）。
+                    </>
+                  )}
+                  {house.status === "rejected" && (
+                    <>
+                      <strong>审核未通过：</strong> 该房源未通过平台合规审核（仅发布者本人与管理员可见）。
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* 实景大图与悬浮 6 宫格核心参数条 (HomePick apartment-details__img-box) */}
             <div
               style={{

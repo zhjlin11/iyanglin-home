@@ -52,29 +52,38 @@ export default async function JobDetailPage({ params }: PageProps) {
   const { id } = await params;
   const item = await getContent(id);
 
-  if (!item || item.kind !== "job" || item.status !== "approved") {
+  if (!item || item.kind !== "job") {
     return notFound();
   }
 
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("yanglin_session")?.value;
   const isLoggedIn = !!sessionCookie;
+  const session = await getSession();
+
+  const isAuthor = Boolean(session?.id && item.authorId && session.id === item.authorId);
+  const isAdmin = session?.role === "ADMIN" || session?.role === "EDITOR";
+  const canPreview = isAuthor || isAdmin;
+
+  // 仅已审核通过的岗位对公众开放；未审核、已下线或已拒绝岗位仅作者本人或管理员可预览
+  if (item.status !== "approved" && !canPreview) {
+    return notFound();
+  }
 
   // 检查当前用户是否已解锁该招聘联系方式
-  const session = await getSession();
   let contactUnlocked = false;
   if (session?.id) {
     const purchase = await prisma.contactPurchase.findUnique({
       where: { userId_targetKind_targetId: { userId: session.id, targetKind: "job", targetId: id } },
     });
     if (purchase) contactUnlocked = true;
-    if (!contactUnlocked && session.role === "ADMIN") contactUnlocked = true;
+    if (!contactUnlocked && isAdmin) contactUnlocked = true;
     if (!contactUnlocked) {
       const vip = await prisma.userMembership.findFirst({ where: { userId: session.id, status: "ACTIVE" } });
       if (vip) contactUnlocked = true;
     }
     // 发布者本人免费
-    if (!contactUnlocked && item.authorId === session.id) contactUnlocked = true;
+    if (!contactUnlocked && isAuthor) contactUnlocked = true;
   }
 
   const parsed = parseJobBody(item.body);
@@ -279,6 +288,61 @@ export default async function JobDetailPage({ params }: PageProps) {
           
           {/* 左侧主体 */}
           <div>
+            {/* 审核中 / 状态异常提示条（仅作者或管理员可见） */}
+            {item.status !== "approved" && (
+              <div
+                style={{
+                  background:
+                    item.status === "pending"
+                      ? "#FFFBEB"
+                      : item.status === "offline"
+                      ? "#F3F4F6"
+                      : "#FEF2F2",
+                  border:
+                    item.status === "pending"
+                      ? "1px solid #FCD34D"
+                      : item.status === "offline"
+                      ? "1px solid #D1D5DB"
+                      : "1px solid #FCA5A5",
+                  color:
+                    item.status === "pending"
+                      ? "#92400E"
+                      : item.status === "offline"
+                      ? "#374151"
+                      : "#991B1B",
+                  borderRadius: "12px",
+                  padding: "14px 18px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                }}
+              >
+                <span style={{ fontSize: "20px" }}>
+                  {item.status === "pending" ? "⏳" : item.status === "offline" ? "📦" : "📝"}
+                </span>
+                <div>
+                  {item.status === "pending" && (
+                    <>
+                      <strong>职位审核中：</strong> 该岗位正在平台人工审核排队中（仅发布者本人与管理员可见）。审核通过后将自动对全站求职者公开展示。
+                    </>
+                  )}
+                  {item.status === "offline" && (
+                    <>
+                      <strong>职位已下架：</strong> 该岗位当前处于下架状态（仅发布者本人与管理员可见）。如需重新招募可在个人中心重新上架。
+                    </>
+                  )}
+                  {item.status === "draft" && (
+                    <>
+                      <strong>草稿状态：</strong> 该岗位处于草稿状态（仅发布者本人可见）。
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Jobzilla 顶部企业封面与岗位概览大卡片 (twm-job-self-wrap) */}
             <div
               style={{
