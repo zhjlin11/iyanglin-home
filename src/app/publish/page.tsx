@@ -305,7 +305,7 @@ export default function UnifiedPublishHubPage() {
           </div>
         </div>
 
-        {/* 核心第一梯队：主要供求与便民通道 */}
+        {/* 核心第一梯队：主要供求与便民通道 (重点入口，手机端全宽横幅呈现) */}
         <div style={{ marginBottom: "1.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -313,17 +313,11 @@ export default function UnifiedPublishHubPage() {
               <h2 style={{ margin: 0, fontSize: "15px", fontWeight: "800", color: "#0F172A" }}>
                 核心供求与便民通道
               </h2>
-              <span style={{ fontSize: "12px", color: "#64748B" }}>本地高频需求，快速触达街坊与园区</span>
+              <span style={{ fontSize: "12px", color: "#64748B" }}>本地高频需求 · 重点通道</span>
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
-              gap: "1rem",
-            }}
-          >
+          <div className="primary-grid">
             {primaryChannels.map((item) => (
               <a
                 key={item.id}
@@ -343,7 +337,7 @@ export default function UnifiedPublishHubPage() {
                   overflow: "hidden",
                   transition: "all 0.2s ease",
                 }}
-                className="publish-card-hover"
+                className="publish-card-hover primary-card"
               >
                 {/* 顶部轻度渐变背景条 */}
                 <div
@@ -452,7 +446,7 @@ export default function UnifiedPublishHubPage() {
           </div>
         </div>
 
-        {/* 第二梯队：商业服务、同城生活与社交互动 */}
+        {/* 第二梯队：商业服务、同城生活与社交互动 (手机端精细化双列呈现) */}
         <div style={{ marginBottom: "1.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -460,17 +454,11 @@ export default function UnifiedPublishHubPage() {
               <h2 style={{ margin: 0, fontSize: "15px", fontWeight: "800", color: "#0F172A" }}>
                 商业服务、生活与社交互动
               </h2>
-              <span style={{ fontSize: "12px", color: "#64748B" }}>商家认证、同城活动、单身相亲与邻里互动</span>
+              <span style={{ fontSize: "12px", color: "#64748B" }}>商家认证 · 组队活动 · 本地相亲 · 社区帖吧</span>
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
-              gap: "1rem",
-            }}
-          >
+          <div className="secondary-grid">
             {secondaryChannels.map((item) => (
               <a
                 key={item.id}
@@ -490,7 +478,7 @@ export default function UnifiedPublishHubPage() {
                   overflow: "hidden",
                   transition: "all 0.2s ease",
                 }}
-                className="publish-card-hover"
+                className="publish-card-hover secondary-card"
               >
                 <div
                   style={{
@@ -515,6 +503,7 @@ export default function UnifiedPublishHubPage() {
                       justifyContent: "center",
                       fontSize: "24px",
                     }}
+                    className="card-icon-box"
                   >
                     {item.icon}
                   </div>
@@ -527,16 +516,19 @@ export default function UnifiedPublishHubPage() {
                       padding: "3px 8px",
                       borderRadius: "6px",
                     }}
+                    className="card-tag-badge"
                   >
                     {item.tag}
                   </span>
                 </div>
 
                 <div style={{ marginBottom: "0.35rem" }}>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0F172A" }}>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0F172A" }} className="card-title">
                     {item.title}
                   </h3>
-                  <span style={{ fontSize: "11.5px", color: "#94A3B8" }}>{item.channelName}</span>
+                  <span style={{ fontSize: "11.5px", color: "#94A3B8" }} className="card-channel">
+                    {item.channelName}
+                  </span>
                 </div>
 
                 <p
@@ -547,6 +539,7 @@ export default function UnifiedPublishHubPage() {
                     lineHeight: "1.55",
                     flex: 1,
                   }}
+                  className="card-desc"
                 >
                   {item.desc}
                 </p>
@@ -558,6 +551,7 @@ export default function UnifiedPublishHubPage() {
                     gap: "4px",
                     marginBottom: "0.85rem",
                   }}
+                  className="card-subcats"
                 >
                   {item.subCategories.map((sub, idx) => (
                     <span
@@ -583,8 +577,9 @@ export default function UnifiedPublishHubPage() {
                     justifyContent: "space-between",
                     alignItems: "center",
                   }}
+                  className="card-footer"
                 >
-                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }} className="card-action-hint">
                     {authChecked && !user ? "登录后进入" : "立即进入"}
                   </span>
                   <span style={{ fontSize: "13px", fontWeight: "800", color: item.color }}>
@@ -708,14 +703,75 @@ export default function UnifiedPublishHubPage() {
       </div>
 
       <style jsx>{`
+        .primary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+          gap: 1rem;
+        }
+        .secondary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+          gap: 1rem;
+        }
         .publish-card-hover:hover {
           transform: translateY(-3px);
           border-color: #cbd5e1 !important;
           box-shadow: 0 10px 24px -4px rgba(15, 23, 42, 0.08) !important;
         }
         @media (max-width: 640px) {
-          .publish-card-hover {
+          .primary-grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+          .secondary-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+          }
+          .primary-card {
             padding: 1rem !important;
+          }
+          .secondary-card {
+            padding: 0.75rem !important;
+            border-radius: 12px !important;
+          }
+          .secondary-card .card-icon-box {
+            width: 36px !important;
+            height: 36px !important;
+            font-size: 18px !important;
+            border-radius: 8px !important;
+          }
+          .secondary-card .card-tag-badge {
+            font-size: 10px !important;
+            padding: 2px 5px !important;
+          }
+          .secondary-card .card-title {
+            font-size: 13.5px !important;
+            line-height: 1.3 !important;
+          }
+          .secondary-card .card-channel {
+            font-size: 10.5px !important;
+          }
+          .secondary-card .card-desc {
+            font-size: 11px !important;
+            line-height: 1.4 !important;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 0.5rem !important;
+          }
+          .secondary-card .card-subcats span:nth-child(n+3) {
+            display: none;
+          }
+          .secondary-card .card-subcats span {
+            font-size: 10px !important;
+            padding: 1px 4px !important;
+          }
+          .secondary-card .card-footer {
+            padding-top: 0.5rem !important;
+          }
+          .secondary-card .card-action-hint {
+            display: none;
           }
         }
       `}</style>
