@@ -65,27 +65,6 @@ export default async function JobDetailPage({ params }: PageProps) {
   const isAdmin = session?.role === "ADMIN" || session?.role === "EDITOR";
   const canPreview = isAuthor || isAdmin;
 
-  // 仅已审核通过的岗位对公众开放；未审核、已下线或已拒绝岗位仅作者本人或管理员可预览
-  if (item.status !== "approved" && !canPreview) {
-    return notFound();
-  }
-
-  // 检查当前用户是否已解锁该招聘联系方式
-  let contactUnlocked = false;
-  if (session?.id) {
-    const purchase = await prisma.contactPurchase.findUnique({
-      where: { userId_targetKind_targetId: { userId: session.id, targetKind: "job", targetId: id } },
-    });
-    if (purchase) contactUnlocked = true;
-    if (!contactUnlocked && isAdmin) contactUnlocked = true;
-    if (!contactUnlocked) {
-      const vip = await prisma.userMembership.findFirst({ where: { userId: session.id, status: "ACTIVE" } });
-      if (vip) contactUnlocked = true;
-    }
-    // 发布者本人免费
-    if (!contactUnlocked && isAuthor) contactUnlocked = true;
-  }
-
   const parsed = parseJobBody(item.body);
 
   // 提取电话并生成脱敏号码
@@ -112,6 +91,295 @@ export default async function JobDetailPage({ params }: PageProps) {
       });
       if (s?.phone) rawPhone = s.phone;
     } catch {}
+  }
+
+  // 非审核通过状态拦截与专用视图呈现（满足“没有真实审核在会员中心点击详情显示待审核，后台审核通过显示审核通过的职位详情”）
+  if (item.status !== "approved") {
+    // 1. 外部普通访客访问未公开内容：给出友好提示，绝不抛出冷冰冰的 404
+    if (!canPreview) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
+          <Navbar />
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 1rem" }}>
+            <div style={{ maxWidth: "480px", width: "100%", background: "white", borderRadius: "16px", padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "52px", marginBottom: "1rem" }}>⏳</div>
+              <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginBottom: "8px" }}>
+                {item.status === "pending" ? "职位正在审核中" : item.status === "offline" ? "职位已暂停招聘" : "内容暂未公开"}
+              </h2>
+              <p style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+                {item.status === "pending"
+                  ? "该招聘岗位已由发布者成功提交，平台专员正在进行企业资质与岗位真实性合规审核。审核通过后将自动对全网求职者公开展示，敬请期待！"
+                  : item.status === "offline"
+                  ? "该招聘岗位目前处于暂停招募或下线状态。您可以浏览杨林本地其他正在招聘的名企岗位。"
+                  : "该信息目前不可见，请浏览其他招聘信息。"}
+              </p>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                <Link href="/jobs" style={{ padding: "10px 20px", background: "#1967D2", color: "white", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  浏览招聘大厅
+                </Link>
+                <Link href="/" style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  返回网站首页
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. 作者本人或管理员访问待审核岗位：呈现专属的【待审核 · 职位预览与审核跟踪】页面
+    if (item.status === "pending") {
+      const createdDateStr = item.createdAt
+        ? new Date(item.createdAt).toLocaleString("zh-CN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "刚刚提交";
+
+      return (
+        <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
+          <Navbar />
+
+          {/* 顶部面包屑 */}
+          <section style={{ background: "#ffffff", borderBottom: "1px solid #E5E7EB", padding: "0.85rem 0" }}>
+            <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 1.25rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#6B7280" }}>
+              <Link href="/" style={{ color: "#4B5563", textDecoration: "none" }}>网站首页</Link>
+              <span>/</span>
+              <Link href="/profile" style={{ color: "#4B5563", textDecoration: "none" }}>会员中心</Link>
+              <span>/</span>
+              <span style={{ color: "#D97706", fontWeight: "700" }}>职位待审核详情</span>
+            </div>
+          </section>
+
+          {/* 主体容器 */}
+          <main style={{ maxWidth: "860px", width: "100%", margin: "1.5rem auto 3rem auto", padding: "0 1.25rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            
+            {/* 卡片 1：审核状态与三步流转进度 */}
+            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #fde68a", padding: "1.75rem", boxShadow: "0 4px 16px rgba(245, 158, 11, 0.08)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", marginBottom: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "28px" }}>⏳</span>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <h1 style={{ fontSize: "18px", fontWeight: "800", color: "#92400e", margin: 0 }}>职位待审核</h1>
+                      <span style={{ padding: "2px 8px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                        平台审核中
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "13px", color: "#78350f", margin: "3px 0 0 0" }}>
+                      您提交的招聘信息正在平台人工审核中，暂未对公众公开展示。
+                    </p>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <Link
+                    href="/admin/content?kind=job"
+                    style={{
+                      padding: "6px 14px",
+                      background: "#16a34a",
+                      color: "white",
+                      borderRadius: "8px",
+                      textDecoration: "none",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                    }}
+                  >
+                    🛠️ 管理员前往后台审核上线 →
+                  </Link>
+                )}
+              </div>
+
+              {/* 三步审核进度轴 */}
+              <div style={{ background: "#fffbeb", borderRadius: "12px", padding: "1.25rem", border: "1px solid #fef08a", marginTop: "0.5rem" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#92400e", marginBottom: "12px" }}>
+                  📋 平台审核流转进度：
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+                  {/* 步骤 1 */}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#16a34a", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>
+                      ✓
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#166534" }}>1. 提交成功</div>
+                      <div style={{ fontSize: "11px", color: "#65a30d" }}>{createdDateStr}</div>
+                    </div>
+                  </div>
+                  {/* 步骤 2 */}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#f59e0b", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>
+                      2
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#b45309" }}>2. 平台人工审核 (进行中)</div>
+                      <div style={{ fontSize: "11px", color: "#d97706" }}>核验用人企业与合规性，工作日约2小时</div>
+                    </div>
+                  </div>
+                  {/* 步骤 3 */}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#cbd5e1", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>
+                      3
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#64748b" }}>3. 审核通过全网公开</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>上线全站招聘大厅与求职推荐</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 隐私与安全提示 */}
+              <div style={{ marginTop: "1rem", fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🔒</span>
+                <span>当前页面为已提交内容的专属预览视图，外部非发布者访客访问将显示“审核中”，无法查看内部联系人信息。</span>
+              </div>
+            </div>
+
+            {/* 卡片 2：已提交职位信息核对预览 */}
+            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "1.75rem", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "1rem", borderBottom: "1px solid #f1f5f9", paddingBottom: "1rem" }}>
+                <div>
+                  <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px 0" }}>
+                    {parsed.jobTitle || item.title}
+                  </h2>
+                  <div style={{ fontSize: "14px", color: "#64748b", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: "700", color: "#334155" }}>🏢 {item.company || "招聘企业"}</span>
+                    <span>·</span>
+                    <span>📍 {parsed.area || item.area || "杨林"}</span>
+                    <span>·</span>
+                    <span>💼 {item.jobType || "全职"}</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: "22px", fontWeight: "900", color: "#d97706" }}>
+                  {parsed.salary || item.salary || "面议"}
+                </div>
+              </div>
+
+              {/* 核心要求标签 */}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+                <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", fontSize: "12px", fontWeight: "600" }}>
+                  学历：{parsed.education || "不限学历"}
+                </span>
+                <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", fontSize: "12px", fontWeight: "600" }}>
+                  经验：{parsed.experience || "经验不限"}
+                </span>
+                {parsed.benefits && (
+                  <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#fef3c7", color: "#92400e", fontSize: "12px", fontWeight: "600" }}>
+                    福利：{parsed.benefits}
+                  </span>
+                )}
+              </div>
+
+              {/* 岗位职责与详细说明 */}
+              <div style={{ marginBottom: "1.5rem" }}>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", marginBottom: "8px" }}>
+                  📄 职位描述与任职要求：
+                </div>
+                <div style={{ fontSize: "13.5px", color: "#334155", lineHeight: "1.7", background: "#f8fafc", padding: "1rem 1.25rem", borderRadius: "10px", whiteSpace: "pre-wrap", border: "1px solid #f1f5f9" }}>
+                  {parsed.description || item.body || "暂无详细描述"}
+                </div>
+              </div>
+
+              {/* 联系方式（作者本人核对） */}
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "1rem 1.25rem" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#1d4ed8", marginBottom: "4px" }}>
+                  📞 提交的联系方式（作者本人核对）：
+                </div>
+                <div style={{ fontSize: "14px", color: "#1e40af", fontWeight: "600" }}>
+                  电话：{rawPhone || "暂未填写手机号"} {item.contactName ? `（联系人：${item.contactName}）` : ""}
+                </div>
+              </div>
+            </div>
+
+            {/* 卡片 3：底部快捷操作与客服加急 */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "1.25rem 1.75rem" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <Link
+                  href="/profile"
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: "8px",
+                    background: "#f1f5f9",
+                    color: "#334155",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    textDecoration: "none",
+                  }}
+                >
+                  ← 返回会员中心
+                </Link>
+                <Link
+                  href="/jobs/new"
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: "8px",
+                    background: "#1967D2",
+                    color: "white",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    textDecoration: "none",
+                  }}
+                >
+                  + 发布其他职位
+                </Link>
+              </div>
+
+              <div style={{ fontSize: "12.5px", color: "#64748b", textAlign: "right" }}>
+                <span>如需加急审核，可联系平台专属客服电话/微信：</span>
+                <b style={{ color: "#d97706", marginLeft: "4px" }}>15887208151</b>
+              </div>
+            </div>
+
+          </main>
+        </div>
+      );
+    }
+
+    // 3. 已下架状态处理
+    if (item.status === "offline") {
+      return (
+        <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
+          <Navbar />
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 1rem" }}>
+            <div style={{ maxWidth: "480px", width: "100%", background: "white", borderRadius: "16px", padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "52px", marginBottom: "1rem" }}>📦</div>
+              <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginBottom: "8px" }}>职位已暂停招聘 (已下架)</h2>
+              <p style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+                该职位当前处于下架状态，未对前台求职者开放。如需重新招聘，请前往个人中心重新上架。
+              </p>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+                <Link href="/profile" style={{ padding: "10px 20px", background: "#1967D2", color: "white", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  前往会员中心
+                </Link>
+                <Link href="/jobs" style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  浏览招聘大厅
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // 检查当前用户是否已解锁该招聘联系方式
+  let contactUnlocked = false;
+  if (session?.id) {
+    const purchase = await prisma.contactPurchase.findUnique({
+      where: { userId_targetKind_targetId: { userId: session.id, targetKind: "job", targetId: id } },
+    });
+    if (purchase) contactUnlocked = true;
+    if (!contactUnlocked && isAdmin) contactUnlocked = true;
+    if (!contactUnlocked) {
+      const vip = await prisma.userMembership.findFirst({ where: { userId: session.id, status: "ACTIVE" } });
+      if (vip) contactUnlocked = true;
+    }
+    // 发布者本人免费
+    if (!contactUnlocked && isAuthor) contactUnlocked = true;
   }
 
   let companyEntity: any = null;
@@ -288,61 +556,6 @@ export default async function JobDetailPage({ params }: PageProps) {
           
           {/* 左侧主体 */}
           <div>
-            {/* 审核中 / 状态异常提示条（仅作者或管理员可见） */}
-            {item.status !== "approved" && (
-              <div
-                style={{
-                  background:
-                    item.status === "pending"
-                      ? "#FFFBEB"
-                      : item.status === "offline"
-                      ? "#F3F4F6"
-                      : "#FEF2F2",
-                  border:
-                    item.status === "pending"
-                      ? "1px solid #FCD34D"
-                      : item.status === "offline"
-                      ? "1px solid #D1D5DB"
-                      : "1px solid #FCA5A5",
-                  color:
-                    item.status === "pending"
-                      ? "#92400E"
-                      : item.status === "offline"
-                      ? "#374151"
-                      : "#991B1B",
-                  borderRadius: "12px",
-                  padding: "14px 18px",
-                  marginBottom: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                }}
-              >
-                <span style={{ fontSize: "20px" }}>
-                  {item.status === "pending" ? "⏳" : item.status === "offline" ? "📦" : "📝"}
-                </span>
-                <div>
-                  {item.status === "pending" && (
-                    <>
-                      <strong>职位审核中：</strong> 该岗位正在平台人工审核排队中（仅发布者本人与管理员可见）。审核通过后将自动对全站求职者公开展示。
-                    </>
-                  )}
-                  {item.status === "offline" && (
-                    <>
-                      <strong>职位已下架：</strong> 该岗位当前处于下架状态（仅发布者本人与管理员可见）。如需重新招募可在个人中心重新上架。
-                    </>
-                  )}
-                  {item.status === "draft" && (
-                    <>
-                      <strong>草稿状态：</strong> 该岗位处于草稿状态（仅发布者本人可见）。
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Jobzilla 顶部企业封面与岗位概览大卡片 (twm-job-self-wrap) */}
             <div
               style={{

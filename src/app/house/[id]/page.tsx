@@ -73,8 +73,253 @@ export default async function HouseDetailPage({ params }: PageProps) {
   const isAdmin = session?.role === "ADMIN" || session?.role === "EDITOR";
   const canPreview = isAuthor || isAdmin;
 
-  if (!house || (house.status !== "approved" && !canPreview)) {
+  if (!house) {
     notFound();
+  }
+
+  const parsed = parseHouseBody(house.body);
+  const cleanHouseTitle = cleanText(house.title);
+  const locationStr = cleanText(house.location) || "嵩明杨林生活圈";
+  const layoutStr = house.layout || parsed.layout || "2室1厅";
+  const areaNum = (house.areaSize || "").replace(/[^\d.]/g, "");
+  const areaStr = areaNum ? `${areaNum} ㎡` : "85 ㎡";
+  const floorStr = parsed.floor || "中楼层 / 共18层";
+  const orientStr = parsed.facing || "南北通透";
+  const rawPhone = parsed.contact || house.contact || "";
+
+  // 房源类型中文标签
+  const typeBadge = houseTypeLabels[house.houseType] || "优质房源";
+
+  // 非审核通过状态拦截与专用视图呈现
+  if (house.status !== "approved") {
+    // 1. 外部普通访客访问未公开内容：给出友好提示，绝不抛出冷冰冰的 404
+    if (!canPreview) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
+          <Navbar />
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 1rem" }}>
+            <div style={{ maxWidth: "480px", width: "100%", background: "white", borderRadius: "16px", padding: "2.5rem 2rem", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "52px", marginBottom: "1rem" }}>⏳</div>
+              <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginBottom: "8px" }}>
+                {house.status === "pending" ? "房源正在审核中" : house.status === "offline" ? "房源已下架" : "内容暂未公开"}
+              </h2>
+              <p style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+                {house.status === "pending"
+                  ? "该房源信息已由房东/发布者成功提交，平台专员正在进行真实性与合规审核。审核通过后将自动对全站公开展示，敬请期待！"
+                  : house.status === "offline"
+                  ? "该房源目前处于下架或已出租/售出状态。您可以浏览杨林其他最新真实房源。"
+                  : "该信息目前不可见，请浏览其他房产信息。"}
+              </p>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                <Link href="/house" style={{ padding: "10px 20px", background: "#FF7500", color: "white", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  浏览房产大厅
+                </Link>
+                <Link href="/" style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700" }}>
+                  返回网站首页
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. 作者本人或管理员访问待审核房源：呈现专属的【待审核 · 房源预览与审核跟踪】页面
+    if (house.status === "pending") {
+      const createdDateStr = house.createdAt
+        ? new Date(house.createdAt).toLocaleString("zh-CN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "刚刚提交";
+
+      return (
+        <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
+          <Navbar />
+
+          {/* 顶部面包屑 */}
+          <section style={{ background: "#ffffff", borderBottom: "1px solid #E5E7EB", padding: "0.85rem 0" }}>
+            <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 1.25rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#6B7280" }}>
+              <Link href="/" style={{ color: "#4B5563", textDecoration: "none" }}>网站首页</Link>
+              <span>/</span>
+              <Link href="/profile" style={{ color: "#4B5563", textDecoration: "none" }}>会员中心</Link>
+              <span>/</span>
+              <span style={{ color: "#D97706", fontWeight: "700" }}>房源待审核详情</span>
+            </div>
+          </section>
+
+          {/* 主体容器 */}
+          <main style={{ maxWidth: "860px", width: "100%", margin: "1.5rem auto 3rem auto", padding: "0 1.25rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            
+            {/* 审核状态卡片 */}
+            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #fde68a", padding: "1.75rem", boxShadow: "0 4px 16px rgba(245, 158, 11, 0.08)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", marginBottom: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "28px" }}>⏳</span>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <h1 style={{ fontSize: "18px", fontWeight: "800", color: "#92400e", margin: 0 }}>房源待审核</h1>
+                      <span style={{ padding: "2px 8px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                        平台审核中
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "13px", color: "#78350f", margin: "3px 0 0 0" }}>
+                      您提交的房源正在平台人工审核中，暂未对公众公开展示。
+                    </p>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <Link
+                    href="/admin/content?kind=house"
+                    style={{
+                      padding: "6px 14px",
+                      background: "#16a34a",
+                      color: "white",
+                      borderRadius: "8px",
+                      textDecoration: "none",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                    }}
+                  >
+                    🛠️ 管理员前往后台审核上线 →
+                  </Link>
+                )}
+              </div>
+
+              {/* 三步流转进度 */}
+              <div style={{ background: "#fffbeb", borderRadius: "12px", padding: "1.25rem", border: "1px solid #fef08a", marginTop: "0.5rem" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#92400e", marginBottom: "12px" }}>
+                  📋 平台审核流转进度：
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#16a34a", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>✓</div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#166534" }}>1. 提交成功</div>
+                      <div style={{ fontSize: "11px", color: "#65a30d" }}>{createdDateStr}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#f59e0b", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>2</div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#b45309" }}>2. 平台人工审核 (进行中)</div>
+                      <div style={{ fontSize: "11px", color: "#d97706" }}>核验房源真实度与产权合规，工作日约2小时</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#cbd5e1", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>3</div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#64748b" }}>3. 审核通过全网公开</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>上线全站房产频道与推荐流</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "1rem", fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🔒</span>
+                <span>当前页面为已提交内容的专属预览视图，外部非发布者访客访问将显示“审核中”，无法查看房东联系方式。</span>
+              </div>
+            </div>
+
+            {/* 房源核对预览卡片 */}
+            <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "1.75rem", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "1rem", borderBottom: "1px solid #f1f5f9", paddingBottom: "1rem" }}>
+                <div>
+                  <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px 0" }}>
+                    {cleanHouseTitle}
+                  </h2>
+                  <div style={{ fontSize: "14px", color: "#64748b", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: "700", color: "#334155" }}>🏷️ {typeBadge}</span>
+                    <span>·</span>
+                    <span>📍 {locationStr}</span>
+                    <span>·</span>
+                    <span>📐 {areaStr}</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: "22px", fontWeight: "900", color: "#FF7500" }}>
+                  {parsed.price || house.price || "面议"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+                <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", fontSize: "12px", fontWeight: "600" }}>
+                  户型：{layoutStr}
+                </span>
+                <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", fontSize: "12px", fontWeight: "600" }}>
+                  朝向：{orientStr}
+                </span>
+                <span style={{ padding: "4px 10px", borderRadius: "6px", background: "#f1f5f9", color: "#475569", fontSize: "12px", fontWeight: "600" }}>
+                  楼层：{floorStr}
+                </span>
+              </div>
+
+              <div style={{ marginBottom: "1.5rem" }}>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", marginBottom: "8px" }}>
+                  📄 房源描述与配置：
+                </div>
+                <div style={{ fontSize: "13.5px", color: "#334155", lineHeight: "1.7", background: "#f8fafc", padding: "1rem 1.25rem", borderRadius: "10px", whiteSpace: "pre-wrap", border: "1px solid #f1f5f9" }}>
+                  {parsed.description || house.body || "暂无详细描述"}
+                </div>
+              </div>
+
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "1rem 1.25rem" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#1d4ed8", marginBottom: "4px" }}>
+                  📞 提交的房东联系方式（作者本人核对）：
+                </div>
+                <div style={{ fontSize: "14px", color: "#1e40af", fontWeight: "600" }}>
+                  电话：{rawPhone || "暂未填写手机号"}
+                </div>
+              </div>
+            </div>
+
+            {/* 底部操作与加急 */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "1.25rem 1.75rem" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <Link
+                  href="/profile"
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: "8px",
+                    background: "#f1f5f9",
+                    color: "#334155",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    textDecoration: "none",
+                  }}
+                >
+                  ← 返回会员中心
+                </Link>
+                <Link
+                  href="/house/new"
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: "8px",
+                    background: "#FF7500",
+                    color: "white",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    textDecoration: "none",
+                  }}
+                >
+                  + 发布其他房源
+                </Link>
+              </div>
+
+              <div style={{ fontSize: "12.5px", color: "#64748b", textAlign: "right" }}>
+                <span>如需加急审核，可联系平台客服电话/微信：</span>
+                <b style={{ color: "#d97706", marginLeft: "4px" }}>15887208151</b>
+              </div>
+            </div>
+
+          </main>
+        </div>
+      );
+    }
   }
 
   // 检查当前用户是否已购买过该房源联系方式
@@ -91,19 +336,6 @@ export default async function HouseDetailPage({ params }: PageProps) {
       if (vip) contactUnlocked = true;
     }
   }
-
-  const parsed = parseHouseBody(house.body);
-  const cleanHouseTitle = cleanText(house.title);
-  const locationStr = cleanText(house.location) || "嵩明杨林生活圈";
-  const layoutStr = house.layout || parsed.layout || "2室1厅";
-  const areaNum = (house.areaSize || "").replace(/[^\d.]/g, "");
-  const areaStr = areaNum ? `${areaNum} ㎡` : "85 ㎡";
-  const floorStr = parsed.floor || "中楼层 / 共18层";
-  const orientStr = parsed.facing || "南北通透";
-  const rawPhone = parsed.contact || house.contact || "";
-
-  // 房源类型中文标签
-  const typeBadge = houseTypeLabels[house.houseType] || "优质房源";
 
   const rawHouseImg = house.images && house.images[0];
   const houseShareImg = rawHouseImg
@@ -141,61 +373,6 @@ export default async function HouseDetailPage({ params }: PageProps) {
           
           {/* 左侧主体内容 */}
           <div>
-            {/* 审核中 / 状态异常提示条（仅作者或管理员可见） */}
-            {house.status !== "approved" && (
-              <div
-                style={{
-                  background:
-                    house.status === "pending"
-                      ? "#FFFBEB"
-                      : house.status === "offline"
-                      ? "#F3F4F6"
-                      : "#FEF2F2",
-                  border:
-                    house.status === "pending"
-                      ? "1px solid #FCD34D"
-                      : house.status === "offline"
-                      ? "1px solid #D1D5DB"
-                      : "1px solid #FCA5A5",
-                  color:
-                    house.status === "pending"
-                      ? "#92400E"
-                      : house.status === "offline"
-                      ? "#374151"
-                      : "#991B1B",
-                  borderRadius: "12px",
-                  padding: "14px 18px",
-                  marginBottom: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                }}
-              >
-                <span style={{ fontSize: "20px" }}>
-                  {house.status === "pending" ? "⏳" : house.status === "offline" ? "📦" : "❌"}
-                </span>
-                <div>
-                  {house.status === "pending" && (
-                    <>
-                      <strong>房源审核中：</strong> 该房源正在平台人工审核排队中（仅发布者本人与管理员可见）。审核通过后将自动对全站租客/买家公开展示。
-                    </>
-                  )}
-                  {house.status === "offline" && (
-                    <>
-                      <strong>房源已下架：</strong> 该房源当前处于下架状态（仅发布者本人与管理员可见）。
-                    </>
-                  )}
-                  {house.status === "rejected" && (
-                    <>
-                      <strong>审核未通过：</strong> 该房源未通过平台合规审核（仅发布者本人与管理员可见）。
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* 实景大图与悬浮 6 宫格核心参数条 (HomePick apartment-details__img-box) */}
             <div
               style={{
