@@ -1,8 +1,25 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import FooterContactButtons from "@/components/FooterContactButtons";
 
 export default async function Footer() {
+  try {
+    const h = await headers();
+    const pathname = h.get("x-pathname") || "";
+    if (
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/register") ||
+      pathname.startsWith("/workspace") ||
+      pathname.startsWith("/mp") ||
+      pathname.startsWith("/assistant") ||
+      pathname.startsWith("/courier")
+    ) {
+      return null;
+    }
+  } catch {}
+
   const year = new Date().getFullYear();
 
   // 从数据库读取站点配置

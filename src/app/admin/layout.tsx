@@ -28,5 +28,19 @@ export default async function AdminRootLayout({
     redirect("/admin/login?error=forbidden");
   }
 
-  return <>{children}</>;
+  return (
+    <div className="admin-root-shell" style={{ minHeight: "100vh", background: "#F5F7FA", isolation: "isolate" }}>
+      <style>{`
+        /* 彻底阻断任何前台 Footer / 悬浮栏 / 营销条在后台管理系统渲染 */
+        .desktop-footer, .mobile-footer, .public-footer, #mobile-floating-dock, .public-shell-container {
+          display: none !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          overflow: hidden !important;
+          pointer-events: none !important;
+        }
+      `}</style>
+      {children}
+    </div>
+  );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type Plan = { id: string; name: string; targetKind: string; priceCents: number; durationDays: number; enabled: boolean };
 
@@ -215,20 +215,16 @@ export default function AdminNewJobPage() {
   };
 
   return (
-    <main className="admin-page" style={{ minHeight: "100vh", background: "#F8FAFC", paddingBottom: "4rem" }}>
-      <AdminNavbar />
-      <div className="shell editor-shell" style={{ maxWidth: "1100px", margin: "2rem auto", padding: "0 1.5rem" }}>
-        
-        <div className="editor-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-          <div>
-            <span className="eyebrow" style={{ color: "#1967D2", fontWeight: "700", fontSize: "13px" }}>招聘管理中心</span>
-            <h1 style={{ fontSize: "24px", fontWeight: "900", color: "#0F172A", margin: "4px 0" }}>录入新招聘职位</h1>
-            <p style={{ color: "#64748B", fontSize: "13.5px", margin: 0 }}>绑定实体公司档案，职位将自动聚合在企业主页与名企招聘大厅。</p>
-          </div>
-          <button className="button button-primary" type="submit" form="job-form" disabled={loading} style={{ padding: "10px 24px", fontWeight: "700" }}>
-            {loading ? "提交中..." : "立即发布职位"}
-          </button>
-        </div>
+    <AdminLayout
+      title="录入新招聘职位"
+      subtitle="绑定实体公司档案，职位将自动聚合在企业主页与名企招聘大厅。"
+      actionButton={
+        <button className="button button-primary" type="submit" form="job-form" disabled={loading} style={{ padding: "10px 24px", fontWeight: "700" }}>
+          {loading ? "提交中..." : "立即发布职位"}
+        </button>
+      }
+    >
+      <div className="editor-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
 
         {message && (
           <div style={{ padding: "12px 18px", borderRadius: "8px", marginBottom: "1.5rem", fontSize: "14px", fontWeight: "600", background: message.includes("成功") ? "#DCFCE7" : "#FEE2E2", color: message.includes("成功") ? "#166534" : "#991B1B", border: message.includes("成功") ? "1px solid #BBF7D0" : "1px solid #FECACA" }}>
@@ -597,6 +593,6 @@ export default function AdminNewJobPage() {
           </div>
         </div>
       )}
-    </main>
+    </AdminLayout>
   );
 }

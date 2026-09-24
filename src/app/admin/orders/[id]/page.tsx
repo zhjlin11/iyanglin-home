@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -50,14 +51,14 @@ export default async function OrderDetailPage({ params }: PageProps) {
 
   if (!order) {
     return (
-      <main className="admin-page">
-        <div className="shell admin-shell">
-          <a className="back-link" href="/admin/orders">← 返回订单管理</a>
-          <div className="panel">
-            <p className="empty-state">订单不存在或已被删除</p>
-          </div>
+      <AdminLayout title="订单详情" subtitle="未找到指定订单">
+        <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e5e7eb", padding: "40px 20px", textAlign: "center" }}>
+          <p style={{ color: "#6b7280", margin: "0 0 16px" }}>订单不存在或已被删除</p>
+          <Link href="/admin/orders" style={{ padding: "8px 16px", borderRadius: "6px", background: "#1677FF", color: "#ffffff", textDecoration: "none", fontSize: "14px", fontWeight: 600 }}>
+            ← 返回订单列表
+          </Link>
         </div>
-      </main>
+      </AdminLayout>
     );
   }
 
@@ -81,16 +82,27 @@ export default async function OrderDetailPage({ params }: PageProps) {
   });
 
   return (
-    <main className="admin-page">
-      <AdminNavbar />
-      <div className="shell detail-shell">
-        <span className="eyebrow">订单详情</span>
-        <h1>{order.orderNo}</h1>
-        <div className="detail-meta">
-          <span>{statusLabels[order.status] || order.status}</span>
-          <span>{kindLabels[order.targetKind] || order.targetKind}</span>
-          <span>¥{yuan(order.amountCents)}</span>
-          <time>{new Date(order.createdAt).toLocaleString("zh-CN")}</time>
+    <AdminLayout
+      title={`订单详情 · ${order.orderNo}`}
+      subtitle={`创建时间：${new Date(order.createdAt).toLocaleString("zh-CN")} · 金额：¥${yuan(order.amountCents)} · 状态：${statusLabels[order.status] || order.status}`}
+      actionButton={
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link href="/admin/orders" style={{ padding: "6px 14px", borderRadius: "6px", background: "#f3f4f6", border: "1px solid #d1d5db", color: "#374151", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            ← 返回列表
+          </Link>
+          {linkedContent && (
+            <Link href={`/admin/content/${linkedContent.id}/preview`} style={{ padding: "6px 14px", borderRadius: "6px", background: "#1677FF", color: "#ffffff", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+              预览关联内容
+            </Link>
+          )}
+        </div>
+      }
+    >
+      <div className="shell detail-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
+        <div className="detail-meta" style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+          <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#EFF6FF", color: "#1D4ED8", fontWeight: 600, fontSize: "13px" }}>{statusLabels[order.status] || order.status}</span>
+          <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#F3F4F6", color: "#374151", fontSize: "13px" }}>{kindLabels[order.targetKind] || order.targetKind}</span>
+          <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#ECFDF5", color: "#047857", fontWeight: 700, fontSize: "13px" }}>¥{yuan(order.amountCents)}</span>
         </div>
 
         <section className="detail-body">
@@ -145,6 +157,6 @@ export default async function OrderDetailPage({ params }: PageProps) {
           )}
         </section>
       </div>
-    </main>
+    </AdminLayout>
   );
 }

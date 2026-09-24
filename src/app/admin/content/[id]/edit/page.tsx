@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import ImageUpload from "@/components/ImageUpload";
 import RichTextEditor from "@/components/RichTextEditor";
 import { parseShopBody, buildShopBody, type ParsedShopBody } from "@/lib/shop-parser";
@@ -270,20 +270,17 @@ export default function EditContentPage({ params }: { params: Promise<{ id: stri
   };
 
   return (
-    <main className="admin-page">
-      <AdminNavbar />
-      <div className="shell editor-shell" style={{ marginTop: "2rem", paddingBottom: "4rem" }}>
-        <div className="editor-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-          <div>
-            <span className="eyebrow">全模块后台编辑</span>
-            <h1 style={{ fontSize: "1.8rem", fontWeight: "bold" }}>编辑{kindNames[item.kind] || "内容"}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>修改各项属性参数与配图，保存后即时全局生效。</p>
-          </div>
-          <div className="editor-actions" style={{ display: "flex", gap: "1rem" }}>
-            <a className="button button-secondary" href="/admin/content">← 返回列表</a>
-            <button className="button button-primary" type="submit" form="content-edit-form">保存修改</button>
-          </div>
+    <AdminLayout
+      title={`编辑${kindNames[item.kind] || "内容"} · ${item.title}`}
+      subtitle="修改各项属性参数与配图，保存后即时全局生效。"
+      actionButton={
+        <div className="editor-actions" style={{ display: "flex", gap: "10px" }}>
+          <a className="button button-secondary" href="/admin/content" style={{ textDecoration: "none" }}>← 返回列表</a>
+          <button className="button button-primary" type="submit" form="content-edit-form">保存修改</button>
         </div>
+      }
+    >
+      <div className="shell editor-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
 
         {message && <div className="notice-success" style={{ marginBottom: "1rem" }}>{message}</div>}
         {error && <div className="notice-error" style={{ marginBottom: "1rem" }}>{error}</div>}
@@ -781,6 +778,6 @@ export default function EditContentPage({ params }: { params: Promise<{ id: stri
           </aside>
         </form>
       </div>
-    </main>
+    </AdminLayout>
   );
 }

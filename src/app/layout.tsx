@@ -4,6 +4,7 @@ import "./globals.css";
 import MobileFloatingDock from "@/components/MobileFloatingDock";
 import SiteMaintenanceGuard from "@/components/SiteMaintenanceGuard";
 import Footer from "@/components/Footer";
+import PublicShellGuard from "@/components/PublicShellGuard";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import WechatShareHiddenImage from "@/components/WechatShareHiddenImage";
@@ -204,7 +205,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <head>
         <style dangerouslySetInnerHTML={{ __html: inlineCss }} />
       </head>
-      <body className="pb-[calc(96px+env(safe-area-inset-bottom,0px))] md:pb-0">
+      <body className="min-h-screen">
         {/* 微信与社交分享爬虫全站默认首图兜底 */}
         <WechatShareHiddenImage imageUrl="https://iyanglin.com/share/v2/default.png?v=20260912" alt="杨林生活网" />
 
@@ -224,8 +225,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
         <SiteMaintenanceGuard>
           {children}
-          {!isAdminOrAuthRoute && <Footer />}
-          <MobileFloatingDock />
+          <PublicShellGuard>
+            {!isAdminOrAuthRoute && <Footer />}
+            <MobileFloatingDock />
+          </PublicShellGuard>
         </SiteMaintenanceGuard>
         {/* 百度统计 */}
         {BAIDU_TONGJI_ID && (

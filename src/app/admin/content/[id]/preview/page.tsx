@@ -1,7 +1,8 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
+import Link from "next/link";
 
 type Item = {
   id: string;
@@ -40,35 +41,43 @@ export default function PreviewPage({ params }: { params: Promise<{ id: string }
 
   if (!item) {
     return (
-      <main className="admin-page">
-        <div className="shell admin-shell">
-          <p>正在加载预览...</p>
+      <AdminLayout title="内容预览" subtitle="正在加载...">
+        <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e5e7eb", padding: "40px", textAlign: "center", color: "#6b7280" }}>
+          正在加载内容预览...
         </div>
-      </main>
+      </AdminLayout>
     );
   }
 
   return (
-    <main className="admin-page">
-      <AdminNavbar />
-      <div className="shell detail-shell">
-        <span className="eyebrow">内容预览</span>
-        <h1>{item.title}</h1>
-        <div className="detail-meta">
-          <span>{kindLabels[item.kind]}</span>
-          <span>{labels[item.status] || item.status}</span>
-          {item.company && <span>{item.company}</span>}
-          {item.category && <span>{item.category}</span>}
-          {item.contact && <span>{item.contact}</span>}
-          <time>{new Date(item.createdAt).toLocaleDateString("zh-CN")}</time>
+    <AdminLayout
+      title={`内容预览 · ${item.title}`}
+      subtitle={`类型：${kindLabels[item.kind] || item.kind} · 状态：${labels[item.status] || item.status} · 发布时间：${new Date(item.createdAt).toLocaleDateString("zh-CN")}`}
+      actionButton={
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link href="/admin/content" style={{ padding: "6px 14px", borderRadius: "6px", background: "#f3f4f6", border: "1px solid #d1d5db", color: "#374151", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            ← 返回列表
+          </Link>
+          <Link href={`/admin/content/${item.id}/edit`} style={{ padding: "6px 14px", borderRadius: "6px", background: "#1677FF", color: "#ffffff", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            编辑内容
+          </Link>
         </div>
-        <article className="detail-body">
+      }
+    >
+      <div className="shell detail-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
+        <div className="detail-meta" style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+          <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#EFF6FF", color: "#1D4ED8", fontWeight: 600, fontSize: "13px" }}>{kindLabels[item.kind]}</span>
+          <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#F3F4F6", color: "#374151", fontSize: "13px" }}>{labels[item.status] || item.status}</span>
+          {item.company && <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#F0FDF4", color: "#15803D", fontSize: "13px" }}>{item.company}</span>}
+          {item.category && <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#FEF3C7", color: "#92400E", fontSize: "13px" }}>{item.category}</span>}
+          {item.contact && <span style={{ padding: "3px 10px", borderRadius: "4px", background: "#F1F5F9", color: "#475569", fontSize: "13px" }}>📞 {item.contact}</span>}
+        </div>
+        <article className="detail-body" style={{ background: "#ffffff", padding: "20px", borderRadius: "8px", border: "1px solid #e5e7eb", lineHeight: 1.8 }}>
           {item.body.split("\n").map((line, index) => (
-            <p key={index}>{line || " "}</p>
+            <p key={index} style={{ margin: "0 0 10px 0" }}>{line || "\u00A0"}</p>
           ))}
         </article>
-        <a className="button button-primary" href={`/admin/content/${item.id}/edit`}>编辑内容</a>
       </div>
-    </main>
+    </AdminLayout>
   );
 }

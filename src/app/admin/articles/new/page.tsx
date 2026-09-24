@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type Plan = { id: string; name: string; targetKind: string; priceCents: number; durationDays: number; enabled: boolean };
 
@@ -58,9 +58,19 @@ export default function NewArticlePage() {
   };
 
   return (
-    <main className="admin-page">
-      <AdminNavbar />
-      <div className="shell editor-shell">
+    <AdminLayout
+      title="发布新文章"
+      subtitle="完善内容后保存草稿或提交审核，可选择文章套餐生成订单。"
+      actionButton={
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button type="button" className="button button-secondary" onClick={() => save("draft", document.getElementById("article-form") as HTMLFormElement)}>
+            保存草稿
+          </button>
+          <button type="submit" form="article-form" className="button button-primary">提交审核</button>
+        </div>
+      }
+    >
+      <div className="editor-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
         <div className="editor-heading">
           <div>
             <span className="eyebrow">文章编辑</span>
@@ -124,6 +134,6 @@ export default function NewArticlePage() {
           </aside>
         </form>
       </div>
-    </main>
+    </AdminLayout>
   );
 }

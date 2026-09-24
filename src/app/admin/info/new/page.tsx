@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AdminNavbar from "@/components/AdminNavbar";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type Plan = { id: string; name: string; targetKind: string; priceCents: number; durationDays: number; enabled: boolean };
 
@@ -55,17 +55,12 @@ export default function NewListingPage() {
   };
 
   return (
-    <main className="admin-page">
-      <AdminNavbar />
-      <div className="shell editor-shell">
-        <div className="editor-heading">
-          <div>
-            <span className="eyebrow">信息编辑</span>
-            <h1>发布分类信息</h1>
-            <p>填写本地信息后提交审核，可选择收费套餐生成订单。</p>
-          </div>
-          <button className="button button-primary" type="submit" form="listing-form">提交审核</button>
-        </div>
+    <AdminLayout
+      title="发布分类信息"
+      subtitle="填写本地信息后提交审核，可选择收费套餐生成订单。"
+      actionButton={<button className="button button-primary" type="submit" form="listing-form">提交审核</button>}
+    >
+      <div className="editor-shell" style={{ maxWidth: "100%", margin: 0, padding: 0 }}>
 
         {message ? (
           <div className={message.includes("失败") || message.includes("填写") ? "notice-error" : "notice-success"} role="status">
@@ -117,6 +112,6 @@ export default function NewListingPage() {
           </aside>
         </form>
       </div>
-    </main>
+    </AdminLayout>
   );
 }
