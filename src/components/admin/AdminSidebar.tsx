@@ -77,16 +77,21 @@ export function AdminSidebar({ collapsed, onToggleCollapse, pendingCounts }: Adm
   const pathname = usePathname();
   const [fullPath, setFullPath] = useState(pathname);
   const [menuSearch, setMenuSearch] = useState("");
-  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({
-    content_domain: true,
-    users_domain: true,
-  });
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({});
   const [favoriteMenus, setFavoriteMenus] = useState<string[]>([]);
 
   // Sync full path with query string
   useEffect(() => {
     setFullPath(pathname + window.location.search);
   }, [pathname]);
+
+  // Auto-expand the active menu group whenever the active route changes
+  useEffect(() => {
+    const activeGroup = menuList.find((m) => m.subItems?.some((s) => isHrefActive(s.href)));
+    if (activeGroup) {
+      setExpandedParents((prev) => ({ ...prev, [activeGroup.id]: true }));
+    }
+  }, [pathname, fullPath]);
 
   // Load favorites from localStorage
   useEffect(() => {
@@ -240,9 +245,20 @@ export function AdminSidebar({ collapsed, onToggleCollapse, pendingCounts }: Adm
 
   const isSubActive = (href: string): boolean => isHrefActive(href);
 
-  const toggleParent = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedParents((prev) => ({ ...prev, [id]: !prev[id] }));
+  const isMenuExpanded = (menu: MenuItem, active: boolean): boolean => {
+    // If user is searching in the search bar, auto-expand all groups
+    if (menuSearch.trim()) return true;
+    // If explicitly toggled (or set via route navigation), use that state
+    if (expandedParents[menu.id] !== undefined) {
+      return expandedParents[menu.id];
+    }
+    // Default fallback: active group is expanded, or primary domains initially open
+    return active || menu.id === "content_domain" || menu.id === "users_domain";
+  };
+
+  const toggleParent = (menu: MenuItem, active: boolean) => {
+    const current = isMenuExpanded(menu, active);
+    setExpandedParents((prev) => ({ ...prev, [menu.id]: !current }));
   };
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
@@ -384,8 +400,7 @@ export function AdminSidebar({ collapsed, onToggleCollapse, pendingCounts }: Adm
         {filteredMenus.map((menu) => {
           const Icon = menu.icon;
           const active = isMenuActive(menu);
-          // The group containing the current route must remain open after navigation/remount.
-          const expanded = Boolean(expandedParents[menu.id] || active);
+          const expanded = isMenuExpanded(menu, active);
           const isFav = favoriteMenus.includes(menu.id);
           const hasChildren = !!menu.subItems;
           const menuHref = menu.href;
@@ -401,7 +416,7 @@ export function AdminSidebar({ collapsed, onToggleCollapse, pendingCounts }: Adm
                 {...(menuProps as any)}
                 onClick={() => {
                   if (hasChildren) {
-                    setExpandedParents((prev) => ({ ...prev, [menu.id]: !prev[menu.id] }));
+                    toggleParent(menu, active);
                   }
                 }}
                 style={{
@@ -519,15 +534,55 @@ export function AdminSidebar({ collapsed, onToggleCollapse, pendingCounts }: Adm
       {/* ── Footer ── */}
       <div style={S.footer}>
         {!collapsed ? (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>系统版本</span>
-              <span style={{ color: "#6b7280", fontFamily: "monospace" }}>v4.1 PROD</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>系统版本</span>
+                <span style={{ color: "#6b7280", fontFamily: "monospace" }}>v4.1 PROD</span>
+              </div>
+              <div style={{ marginTop: "3px", color: "#4b5563" }}>嵩明县 · 杨林运营中心</div>
             </div>
-            <div style={{ marginTop: "3px", color: "#4b5563" }}>嵩明县 · 杨林运营中心</div>
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "6px",
+                padding: "5px 7px",
+                color: "#9ca3af",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "11px",
+                transition: "all 0.15s ease",
+              }}
+              title="收起侧边栏"
+            >
+              <ToggleLeft size={14} />
+            </button>
           </div>
         ) : (
-          <div style={{ textAlign: "center", fontFamily: "monospace", color: "#4b5563" }}>v4</div>
+          <div style={{ textAlign: "center" }}>
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#6b7280",
+                cursor: "pointer",
+                padding: "4px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="展开侧边栏"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         )}
       </div>
     </aside>
